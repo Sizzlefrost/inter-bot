@@ -1,0 +1,163 @@
+{
+   "1": {
+      "UID": "140129710268088330",
+      "mainrole": "support",
+      "roles": {
+         "top": [
+            {
+               "confidence": "normal",
+               "name": "Mordekaiser"
+            },
+            {
+               "confidence": "normal",
+               "name": "Sion"
+            },
+            {
+               "confidence": "normal",
+               "name": "Ornn"
+            }
+         ],
+         "jungle": [
+            {
+               "confidence": "normal",
+               "name": "Karthus"
+            },
+            {
+               "confidence": "normal",
+               "name": "Shyvana"
+            },
+            {
+               "confidence": "normal",
+               "name": "Evelynn"
+            }
+         ],
+         "middle": [],
+         "bottom": [
+            {
+               "confidence": "normal",
+               "name": "Caitlyn"
+            },
+            {
+               "confidence": "shaky",
+               "name": "Kai'Sa"
+            },
+            {
+               "confidence": "normal",
+               "name": "Ashe"
+            },
+            {
+               "confidence": "normal",
+               "name": "Miss Fortune"
+            },
+            {
+               "confidence": "normal",
+               "name": "Senna"
+            }
+         ],
+         "support": [
+            {
+               "confidence": "comfort",
+               "name": "Lux"
+            },
+            {
+               "confidence": "comfort",
+               "name": "Morgana"
+            },
+            {
+               "confidence": "comfort",
+               "name": "Janna"
+            },
+            {
+               "confidence": "normal",
+               "name": "Nautilus"
+            },
+            {
+               "confidence": "normal",
+               "name": "Galio"
+            },
+            {
+               "confidence": "normal",
+               "name": "Senna"
+            },
+            {
+               "confidence": "normal",
+               "name": "Ahri"
+            }
+         ]
+      }
+   },
+   "2": {
+      "UID": "225678449790943242",
+      "mainrole": "jungle",
+      "roles": {
+         "top": [
+            {
+               "confidence": "normal",
+               "name": "Renekton"
+            },
+            {
+               "confidence": "normal",
+               "name": "Ornn"
+            },
+            {
+               "confidence": "normal",
+               "name": "Mordekaiser"
+            },
+            {
+               "confidence": "normal",
+               "name": "Sion"
+            }
+         ],
+         "jungle": [
+            {
+               "confidence": "comfort",
+               "name": "Evelynn"
+            },
+            {
+               "confidence": "normal",
+               "name": "Karthus"
+            },
+            {
+               "confidence": "normal",
+               "name": "Rammus"
+            },
+            {
+               "confidence": "normal",
+               "name": "Hecarim"
+            },
+            {
+               "confidence": "normal",
+               "name": "Lee Sin"
+            },
+            {
+               "confidence": "normal",
+               "name": "Kha'Zix"
+            },
+            {
+               "confidence": "normal",
+               "name": "Kindred"
+            },
+            {
+               "confidence": "comfort",
+               "name": "Kayn"
+            }
+         ],
+         "middle": [],
+         "bottom": [
+            {
+               "confidence": "normal",
+               "name": "Xayah"
+            },
+            {
+               "confidence": "normal",
+               "name": "Ashe"
+            },
+            {
+               "confidence": "normal",
+               "name": "Twitch"
+            }
+         ],
+         "support": []
+      }
+   }
+}
