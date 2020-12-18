@@ -16,16 +16,14 @@ from googleapiclient.http import MediaIoBaseDownload
 import io
 import os
 
-logger = logging.getLogger("galactical_bot")
-logging.basicConfig(format='[%(asctime)s.%(msecs)d] /%(name)s/ [%(levelname)s] %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
-
-#check if bot is already running how
-
 gauth = GoogleAuth()
 gauth.LoadClientConfigSettings()
 gauth.LocalWebserverAuth()
 drive = GoogleDrive(gauth)
 service = build('drive', 'v3', credentials=gauth.credentials)
+
+logger = logging.getLogger("galactical_bot")
+logging.basicConfig(format='[%(asctime)s.%(msecs)d] /%(name)s/ [%(levelname)s] %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 
 ROLEFILTER = "^(top|jgl|mid|bot|sup|jungle|middle|bottom|support|toplane|midlane|botlane|jg|jung|adc|adcarry|supp)"
 COMMANDS = [ "hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate" ]
@@ -36,16 +34,18 @@ bot = commands.Bot(command_prefix='.')
 fp = open("phirdchamp.png", "rb")
 pfp = fp.read()
 
+
 @bot.event
 async def on_ready():
     await bot.user.edit(avatar=pfp)
-    logger.info('{0.user} successfully brought online.'.format(bot))
+    logger.info('{0.user} running it down.'.format(bot))
 
 
 async def timer():
     await bot.wait_until_ready()
     channel = bot.get_channel(713343824641916971)
     msg_sent = False
+    refresh = False
     while True:
         time = dt.datetime.now()
         if time.hour == 18 and time.minute == 0 and time.second == 0 and msg_sent is False:
@@ -53,27 +53,28 @@ async def timer():
             await channel.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
             await channel.send("<@140129710268088330> Daily Reminder!")
             msg_sent = True
+        elif time.minute == 0 and time.second == 0 and refresh is False:
+            gauth.Refresh()
+            refresh = True
         else:
             msg_sent = False
+            refresh = False
             await asyncio.sleep(1)
 
 
-@bot.command()
-async def upload(ctx, target, mimeType = "text/csv"):
+async def upload(target, mimeType = "text/csv"):
     file1 = drive.CreateFile({"mimeType": mimeType})
     file1.SetContentFile(target)
     file1.Upload()  # Upload the file.
     logger.info('Created file %s with mimeType %s' % (file1['title'], file1['mimeType']))
 
-@bot.command()
-async def download(ctx, target):
+async def download(target):
     fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
     for file in fileList:
         logger.info('Title: %s, ID: %s' % (file['title'], file['id']))
         # Get the folder ID that you want
         if (file['title'] == target):
             fileID = file['id']
-    #handle the case where target isnt found -S.
     request = service.files().get_media(fileId=fileID)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
@@ -82,14 +83,28 @@ async def download(ctx, target):
         status, done = downloader.next_chunk()
         logger.info("Download %d%%." % int(status.progress() * 100))
     fh.seek(0)
+    #TODO REGEXP
+    if target[-1] == "v":
+        return fh
+    elif target[-1] == "n":
+        return fh.getvalue()
 
-    return fh.getvalue()
+async def update(target, mimeType = "text/csv"):
+    fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
+    for file in fileList:
+        logger.info('Title: %s, ID: %s' % (file['title'], file['id']))
+        # Get the folder ID that you want
+        if (file['title'] == target):
+            fileID = file['id']
 
+    request = service.files().update(fileId=fileID, media_body=target, media_mime_type=mimeType).execute()
+
+    os.remove(target)
 @bot.command()
 async def remind(ctx):
     print("send")
-    await ctx.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
-    await ctx.send("<@140129710268088330> Daily Reminder!")
+    await replywithembed("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif", ctx)
+    await replywithembed("<@140129710268088330> Daily Reminder!", ctx)
 
 
 @bot.command()
@@ -99,15 +114,25 @@ async def save(ctx, id, media=None):
             media = ctx.message.attachments[0].url
         else:
             return
+
+    file = await download("media.csv")
+    with open("media.csv", "wb") as f:
+        f.write(file.read())
+        f.close()
     with open("media.csv", "a+", newline="") as csvfile:
         writer = csv.writer(csvfile, delimiter=",", quotechar="|", quoting=csv.QUOTE_MINIMAL)
         writer.writerow([id, media])
-        await ctx.send(f"Saved as ID: {id}")
+    await update("media.csv")
+    await replywithembed(f"Saved as ID: {id}", ctx)
 
 
 @bot.command()
 async def delete(ctx, id):
     lines = []
+    file = await download("media.csv")
+    with open("media.csv", "wb") as f:
+        f.write(file.read())
+        f.close()
     with open("media.csv", "r+", newline="") as out:
         reader = csv.reader(out, delimiter=",", quotechar="|")
         for row in reader:
@@ -116,11 +141,16 @@ async def delete(ctx, id):
     with open("media.csv", "w+", newline="") as inp:
         writer = csv.writer(inp, delimiter=",", quotechar="|", quoting=csv.QUOTE_MINIMAL)
         writer.writerows(lines)
-        await ctx.send(f"Deleted ID: {id}")
+    await replywithembed(f"Deleted ID: {id}", ctx)
+    await update("media.csv")
 
 
 @bot.command()
 async def gimme(ctx, id):
+    file = await download("media.csv")
+    with open("media.csv", "wb") as f:
+        f.write(file.read())
+        f.close()
     with open("media.csv", "r+", newline="") as csvfile:
         reader = csv.reader(csvfile, delimiter=",", quotechar="|")
         media = " "
@@ -128,17 +158,23 @@ async def gimme(ctx, id):
             if row[0] == id:
                 media = row[1]
         await ctx.send(media)
+    os.remove("media.csv")
 
 
 @bot.command()
 async def list(ctx):
+    file = await download("media.csv")
+    with open("media.csv", "wb") as f:
+        f.write(file.read())
+        f.close()
     with open("media.csv", "r+", newline="") as csvfile:
         reader = csv.reader(csvfile, delimiter=",", quotechar="|")
         string = ""
         for row in reader:
             string += row[0]
             string += ", "
-        await ctx.send(string[:-2])
+        await replywithembed(string[:-2], ctx)
+    os.remove("media.csv")
 
 
 @bot.command()
@@ -175,59 +211,6 @@ async def disco(ctx):
             await role.edit(colour=newColour)
     newColour = discord.Colour.from_rgb(242,117,55)
     await role.edit(colour=newColour)
-
-
-@bot.command()
-async def addme(ctx):
-    name = str(ctx.message.author)
-    id = str(ctx.message.author.id)
-    with open("secretsanta.csv", "r+", newline="") as csvfile:
-        reader = csv.reader(csvfile, delimiter=",", quotechar="|")
-        for row in reader:
-            if len(row) > 0:
-                if row[0] == name:
-                    await ctx.send("You have already joined the Secret Santa!")
-                    return
-        with open("secretsanta.csv", "a", newline="") as csvfile:
-            writer = csv.writer(csvfile, delimiter=",", quotechar="|", quoting=csv.QUOTE_MINIMAL)
-            writer.writerow([name, id])
-            await ctx.send("Joined!")
-
-
-@bot.command()
-async def select(ctx):
-    await bot.wait_until_ready()
-    with open("secretsanta.csv", "r+", newline="") as csvfile:
-        reader = csv.reader(csvfile, delimiter=",", quotechar="|")
-        whoTo = []
-        whoFrom = []
-        pairs = []
-        total = 0
-        for row in reader:
-            if len(row) > 0:
-                whoTo.append([row[0], row[1]])
-                whoFrom.append([row[0], row[1]])
-        while whoFrom:
-            x = random.randint(0, len(whoTo) - 1)
-            currentWhoTo = whoTo.pop(x)
-            currentWhoFrom = whoFrom.pop(0)
-            if total > 50:
-                await ctx.send("Failed")
-                return
-            elif currentWhoTo == currentWhoFrom:
-                whoTo.append(currentWhoTo)
-                whoFrom.append(currentWhoFrom)
-                total += 1
-            else:
-                pairs.append([currentWhoFrom[1], currentWhoTo[0]])
-                total = 0
-        for i in pairs:
-            user = await bot.fetch_user(int(i[0]))
-            print(user)
-            if user.dm_channel is None:
-                await user.create_dm()
-            await user.send(f"Secret Santa: {i[1]}")
-            await user.send("We will try to get in a call on Friday 18th to send / receive the skin, so have your choice ready by then!")
 
 
 @bot.command()
@@ -272,14 +255,14 @@ async def confidence(ctx, champ="None", level="None", role=""):
         return
     if role != "":
         role = standardizeRole(role)
-    champ = crossCheckChamp(champ)
+    champ = await crossCheckChamp(champ)
     if champ == None:  # bad champ, throw 105
         await reporterror(105, ctx, champ)
     level = standardizeConf(level)
     if level == None:  # bad confidence level, no dedicated error for that, throw 107 invalid syntax instead
         await reporterror(107, ctx, COMMANDS[6])
 
-    file = await download(ctx, "champ_pools.json")
+    file = await download("champ_pools.json")
     users = json.loads(file)
     for index in users:
         if users[index]['UID'] == str(ctx.message.author.id):
@@ -324,9 +307,6 @@ async def confidence(ctx, champ="None", level="None", role=""):
                     # upload to file
                     with open("champ_pools.json", "w") as file:
                         file.write(json.dumps(users, indent=3))
-                        logger.info(f"Saving file: {json.dumps(users, indent=3)}")
-                        file.close()
-                    await upload(ctx, "champ_pools.json", "application/json")
 
                     await replywithembed("Done! Confidence for {}'s {} set to {}".format(ctx.message.author.name, champ, level),
                                          ctx, COLOUR_SUCCESS)
@@ -353,7 +333,7 @@ async def mypool(ctx):
 
     print("About to open file")
     logger.info("About to open file")
-    file = await download(ctx, "champ_pools.json")
+    file = await download("champ_pools.json")
     users = json.loads(file)
     logger.info("File opened, users loaded %s" % users)
     for index in users:
@@ -396,9 +376,8 @@ async def imain(ctx, role="None"):
         return
     role = standardizeRole(role)
 
-    with open("champ_pools.json") as file:
-        users = json.load(file)
-        file.close()
+    file = await download("champ_pools.json")
+    users = json.load(file)
     for index in users:
         if users[index]['UID'] == str(ctx.message.author.id):
             users[index]["mainrole"] = role
@@ -416,9 +395,10 @@ async def imain(ctx, role="None"):
             "support": [],
         }
     }
-    file = open("champ_pools.json", "w")
-    file.write(json.dumps(users, indent=3))
-    file.close()
+    with open("champ_pools.json", "w") as file:
+        file.write(json.dumps(users, indent=3))
+    await update("champ_pools.json", "application/json")
+
     await replywithembed("Done! {}'s main role confirmed as {}.".format(ctx.message.author.name, role), ctx, COLOUR_SUCCESS)
 
 
@@ -465,12 +445,11 @@ async def iplay(ctx, *args):
         champArr = []
         while champs:
             # Loop through champs, put valid ones into ChampArr, raise 105 for invalid ones
-            found = crossCheckChamp(champs.pop(0))
+            found = await crossCheckChamp(champs.pop(0))
             champArr.append(found)
 
-        with open("champ_pools.json") as file:
-            users = json.load(file)
-            file.close()
+        file = await download("champ_pools.json")
+        users = json.load(file)
 
         found = False
         for index in users:
@@ -518,7 +497,7 @@ async def iplay(ctx, *args):
 
         with open("champ_pools.json", "w") as file:
             file.write(json.dumps(users, indent=3))
-            file.close()
+        await update("champ_pools.json", "application/json")
 
         await replywithembed("Done! {}'s champion pool adjustments confirmed and completed.".format(ctx.message.author.name), ctx, COLOUR_SUCCESS)
 
@@ -583,7 +562,7 @@ async def replywithembed(content="I'm supposed to send an empty message? Odd.", 
     if ctx == "":
         await reporterror(100)
         return
-    e = discord.Embed(title="GALACTICAL COMMUNICATION", description=content, colour=colour)
+    e = discord.Embed(title="INTBOT", description=content, colour=colour)
     await ctx.send(embed=e)
 
 
@@ -612,21 +591,21 @@ async def help(ctx, cmdname=""):
         await reporterror(108, ctx)
         return
     if found == 0:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[0]}``\n\nA greeting. Human tradition, you type hello, I greet you back. Makes people feel better, apparently.\n\nSYNTAX: `` `hello``"
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[0]}``\n\nA greeting. Human tradition, you type hello, I greet you back. Makes people feel better, apparently.\n\nSYNTAX: `` `hello``"
     if found == 1:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[1]}``\n\nThe command to call this utility. Without arguments, displays this message. Supplied with a command, I'll explain how to use that command.\nSYNTAX: `` `help <optional single command>``\n\nOTHER AVAILABLE COMMANDS: %s" % cmdStr
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[1]}``\n\nThe command to call this utility. Without arguments, displays this message. Supplied with a command, I'll explain how to use that command.\nSYNTAX: `` `help <optional single command>``\n\nOTHER AVAILABLE COMMANDS: %s" % cmdStr
     if found == 2:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[2]}``\n\nChecks whether I know the champ. Make sure to give me something to work with. Can be an alias, I know some common community names for the champs. I'm still a bot though, so would be nice if you'd give me the official, full champ name.\n\nSYNTAX: `` `assertchamp <single champion name>``"
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[2]}``\n\nChecks whether I know the champ. Make sure to give me something to work with. Can be an alias, I know some common community names for the champs. I'm still a bot though, so would be nice if you'd give me the official, full champ name.\n\nSYNTAX: `` `assertchamp <single champion name>``"
     if found == 3:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[3]}``\n\nSets your main role to what you say. If you're not in the database yet, this is the way I'll be adding you. I need to know your main role so that when you use other commands and forget to specify a role, I'll just fall back on it; so make sure to call this at least once, so you're in the file, then I'll be able to serve you fully.\n\nSYNTAX: `` `imain <single role name>``"
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[3]}``\n\nSets your main role to what you say. If you're not in the database yet, this is the way I'll be adding you. I need to know your main role so that when you use other commands and forget to specify a role, I'll just fall back on it; so make sure to call this at least once, so you're in the file, then I'll be able to serve you fully.\n\nSYNTAX: `` `imain <single role name>``"
     if found == 4:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[4]}``\n\nSets up your champions in the pool. This command can get confusing, bear with me. -c, or -champs, can be followed by any amount of champion names, and I'll add those to the list. If you also specify a -r (-role), I'll add them under that role: so `` `iplay -c eve karthus -r jungle`` adds these champions to the jungle for you. You can also say 'in' instead of '-r', so like `` `iplay zed in midlane``. Now if you also say -delete, or -del or -d, I'll delete the champs from the pool instead of adding them.\n\nNote that if you need to type in a multiword champion name, like 'Lee Sin', I'll interpret it as two champs, so make sure to drop it as a single word instead, 'Leesin' would do.\n\nSYNTAX: `` `iplay <-c|-champs [any amount of single-word champion names]> <-r|-role|in [single optional role]> <-d|-del|-delete optional>``"
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[4]}``\n\nSets up your champions in the pool. This command can get confusing, bear with me. -c, or -champs, can be followed by any amount of champion names, and I'll add those to the list. If you also specify a -r (-role), I'll add them under that role: so `` `iplay -c eve karthus -r jungle`` adds these champions to the jungle for you. You can also say 'in' instead of '-r', so like `` `iplay zed in midlane``. Now if you also say -delete, or -del or -d, I'll delete the champs from the pool instead of adding them.\n\nNote that if you need to type in a multiword champion name, like 'Lee Sin', I'll interpret it as two champs, so make sure to drop it as a single word instead, 'Leesin' would do.\n\nSYNTAX: `` `iplay <-c|-champs [any amount of single-word champion names]> <-r|-role|in [single optional role]> <-d|-del|-delete optional>``"
     if found == 5:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[5]}``\n\nDisplays your champion pool. It's also displayed after you make any champion changes with `` `iplay``. It's gonna be formatted into roles and coloured, so champs you're confident in show up in cyan, champs you feel shaky on will be red, and the rest are yellow. You can set up confidence levels with `` `confidence``.\n\nSYNTAX: `` `mypool`"
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[5]}``\n\nDisplays your champion pool. It's also displayed after you make any champion changes with `` `iplay``. It's gonna be formatted into roles and coloured, so champs you're confident in show up in cyan, champs you feel shaky on will be red, and the rest are yellow. You can set up confidence levels with `` `confidence``.\n\nSYNTAX: `` `mypool`"
     if found == 6:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[6]}``\n\nLets you set up how confident you are on a champ. Accepts the champion you're changing - it must already be in your pool - the level to change to, it can be comfortable, normal or shaky, and I understand some other aliases for it; and the role, optionally, otherwise all roles you play the champ in will be affected.\n\nSYNTAX: `` `confidence <single champion name> <[confidence]> <optional role>``\n\nAcceptable confidence levels: \n`high || comfort(able) || main(ing) || great`\n`normal || ok || good || solid || average || playing`\n`low || poor || shaky || practice / practicing || learning`"
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[6]}``\n\nLets you set up how confident you are on a champ. Accepts the champion you're changing - it must already be in your pool - the level to change to, it can be comfortable, normal or shaky, and I understand some other aliases for it; and the role, optionally, otherwise all roles you play the champ in will be affected.\n\nSYNTAX: `` `confidence <single champion name> <[confidence]> <optional role>``\n\nAcceptable confidence levels: \n`high || comfort(able) || main(ing) || great`\n`normal || ok || good || solid || average || playing`\n`low || poor || shaky || practice / practicing || learning`"
     if found == 7:
-        content = f"**GALACTICAL HELP UTILITY**\n\n``.{COMMANDS[7]}``\n\nSuper secret nuclear option.\n\nSYNTAX: `` `confidence ???``"
+        content = f"**INTBOT HELP UTILITY**\n\n``.{COMMANDS[7]}``\n\nSuper secret nuclear option.\n\nSYNTAX: `` `confidence ???``"
 
     await ctx.send(content)
 
@@ -683,13 +662,12 @@ def standardizeConf(conf):
 
 # --------------------------------------------------#
 # --------------------------------------------------#
-def crossCheckChamp(testChamp):
+async def crossCheckChamp(testChamp):
     # check that the given champ name/alias exists in the database, then return the actual champion reference
     # on failure, return None
     # practically like the above function, but for champs instead of roles and DOES do a validity check
-    with open("champs.json") as file:
-        champs = json.load(file)
-        file.close()
+    file = await download("champs.json")
+    champs = json.load(file)
     for champ in champs:
         if preprocessName(champ) == preprocessName(testChamp):
             return champ
