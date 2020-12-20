@@ -667,7 +667,7 @@ async def crossCheckChamp(testChamp):
     # on failure, return None
     # practically like the above function, but for champs instead of roles and DOES do a validity check
     file = await download("champs.json")
-    champs = json.load(file)
+    champs = json.loads(file)
     for champ in champs:
         if preprocessName(champ) == preprocessName(testChamp):
             return champ

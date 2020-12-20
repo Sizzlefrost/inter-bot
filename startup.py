@@ -21,13 +21,12 @@ async def on_ready():
 @bot.event
 async def on_member_update(before, after):
     await bot.wait_until_ready()
-    print("Update")
+    print("Update of %s" % str(before))
     if str(before) == "IntersBot#3117":
         if str(after.status) == "offline":
             print("Done")
             global go
             go = True
-            return
 
 
 async def run():
