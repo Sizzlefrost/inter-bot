@@ -63,6 +63,30 @@ async def timer():
             await asyncio.sleep(1)
 
 
+@bot.command()
+@commands.has_role(777947935698583562)
+async def mute(ctx, id):
+    id = int(id)
+    server = bot.get_guild(ctx.guild.id)
+    user = await server.fetch_member(id)
+    role = discord.utils.get(ctx.message.guild.roles, name="MUTED")
+    await user.add_roles(role)
+    reply = f"{user} has been muted"
+    await replywithembed(reply, ctx)
+
+
+@bot.command()
+@commands.has_role(777947935698583562)
+async def unmute(ctx, id):
+    id = int(id)
+    server = bot.get_guild(ctx.guild.id)
+    user = await server.fetch_member(id)
+    role = discord.utils.get(ctx.message.guild.roles, name="MUTED")
+    await user.remove_roles(role)
+    reply = f"{user} has been unmuted"
+    await replywithembed(reply, ctx)
+    
+    
 async def upload(target, mimeType = "text/csv"):
     file1 = drive.CreateFile({"mimeType": mimeType})
     file1.SetContentFile(target)
@@ -106,6 +130,7 @@ async def update(target, mimeType = "text/csv"):
     os.remove(target)
 
 @bot.command()
+@commands.has_role(789912991159418937)
 async def remind(ctx, user = 140129710268088330):
     #rewrote this a bit
     #user accepts nickname, username or UID
@@ -117,6 +142,7 @@ async def remind(ctx, user = 140129710268088330):
 
 
 @bot.command()
+@commands.has_role(789912991159418937)
 async def save(ctx, id, media=None):
     if media is None:
         if len(ctx.message.attachments) > 0:
@@ -136,6 +162,7 @@ async def save(ctx, id, media=None):
 
 
 @bot.command()
+@commands.has_role(789912991159418937)
 async def delete(ctx, id):
     lines = []
     file = await download("media.csv")
@@ -187,6 +214,7 @@ async def list(ctx):
 
 
 @bot.command()
+@commands.has_role(789912991159418937)
 async def bday(ctx, user = 140129710268088330):
     #same ol' thingamajig here; now accepts user as an argument
     user = interpretUser(ctx, user)
@@ -200,12 +228,14 @@ async def bday(ctx, user = 140129710268088330):
 
 
 @bot.command()
+@commands.has_role(789912991159418937)
 async def clear(ctx, number=1):
     number = int(number)
     await ctx.channel.purge(limit=number+1)
 
 
 @bot.command()
+@commands.has_role(789912991159418937)
 async def disco(ctx):
     await bot.wait_until_ready()
     currentTime = time.perf_counter()
@@ -225,6 +255,7 @@ async def disco(ctx):
 
 
 @bot.command()
+@commands.has_role(789912991159418937)
 async def spam(ctx, tag, id=""):
     try:
         if type(int(tag[1])) is int:
