@@ -24,10 +24,11 @@ service = build('drive', 'v3', credentials=gauth.credentials)
 
 sizzler = logging.getLogger("intbot.bot.sizzle")
 logger = logging.getLogger("intbot.bot")
-logging.basicConfig(format='[%(asctime)s.%(msecs)d] [%(levelname)s] /%(name)s/ %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
+logging.basicConfig(format='[%(asctime)s.%(msecs)d] [%(levelname)s] /%(name)s/ %(message)s',
+                    datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 
 ROLEFILTER = "^(top|jgl|mid|bot|sup|jungle|middle|bottom|support|toplane|midlane|botlane|jg|jung|adc|adcarry|supp)"
-COMMANDS = [ "hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate" ]
+COMMANDS = ["hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate"]
 COLOUR_SUCCESS = 0x00FF00
 COLOUR_FAILURE = 0xFF0000
 COLOUR_DEFAULT = 0x7289da
@@ -51,8 +52,8 @@ async def timer():
     while True:
         time = dt.datetime.now()
         if time.hour == 18 and time.minute == 0 and time.second == 0 and msg_sent is False:
-            #shortened this to call remind
-            remind(ctx)
+            # shortened this to call remind
+            await remind(channel)
             msg_sent = True
         elif time.minute == 0 and time.second == 0 and refresh is False:
             gauth.Refresh()
@@ -85,13 +86,14 @@ async def unmute(ctx, id):
     await user.remove_roles(role)
     reply = f"{user} has been unmuted"
     await replywithembed(reply, ctx)
-    
-    
-async def upload(target, mimeType = "text/csv"):
+
+
+async def upload(target, mimeType="text/csv"):
     file1 = drive.CreateFile({"mimeType": mimeType})
     file1.SetContentFile(target)
     file1.Upload()  # Upload the file.
     logger.info('Created file %s with mimeType %s' % (file1['title'], file1['mimeType']))
+
 
 async def download(target):
     fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
@@ -109,7 +111,7 @@ async def download(target):
         logger.info("Download %d%%." % int(status.progress() * 100))
     fh.seek(0)
     extension = re.search("(\.[a-z]*)$", target).group()[1:]
-    #pitfall: group() can fail if the search fails. But search should only fail on names without extensions, and those would error on the google drive search before this line is even reached, so I'm keeping it short and risky with no error handling - S.
+    # pitfall: group() can fail if the search fails. But search should only fail on names without extensions, and those would error on the google drive search before this line is even reached, so I'm keeping it short and risky with no error handling - S.
     if extension == "csv":
         return fh
     elif extension == "json":
@@ -117,7 +119,8 @@ async def download(target):
     else:
         return fh
 
-async def update(target, mimeType = "text/csv"):
+
+async def update(target, mimeType="text/csv"):
     fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
     for file in fileList:
         logger.info('Google Drive File: %s, ID: %s' % (file['title'], file['id']))
@@ -129,12 +132,13 @@ async def update(target, mimeType = "text/csv"):
 
     os.remove(target)
 
+
 @bot.command()
 @commands.has_role(789912991159418937)
-async def remind(ctx, user = 140129710268088330):
-    #rewrote this a bit
-    #user accepts nickname, username or UID
-    #by default it's me, so normal .remind's work as usual - S.
+async def remind(ctx, user=140129710268088330):
+    # rewrote this a bit
+    # user accepts nickname, username or UID
+    # by default it's me, so normal .remind's work as usual - S.
     user = interpretUser(ctx, user)
     logger.info("Reminding %s", user)
     await ctx.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
@@ -215,15 +219,16 @@ async def list(ctx):
 
 @bot.command()
 @commands.has_role(789912991159418937)
-async def bday(ctx, user = 140129710268088330):
-    #same ol' thingamajig here; now accepts user as an argument
+async def bday(ctx, user=140129710268088330):
+    # same ol' thingamajig here; now accepts user as an argument
     user = interpretUser(ctx, user)
     for server in bot.guilds:
         logger.info(server.name)
         for channel in server.channels:
             if channel.type == discord.ChannelType.text:
                 for i in range(10):
-                    await channel.send("https://cdn.discordapp.com/attachments/498040249218236416/780150571197005824/bday.gif")
+                    await channel.send(
+                        "https://cdn.discordapp.com/attachments/498040249218236416/780150571197005824/bday.gif")
                 await channel.send(f"{user} Happy Birthday!")
 
 
@@ -231,7 +236,7 @@ async def bday(ctx, user = 140129710268088330):
 @commands.has_role(789912991159418937)
 async def clear(ctx, number=1):
     number = int(number)
-    await ctx.channel.purge(limit=number+1)
+    await ctx.channel.purge(limit=number + 1)
 
 
 @bot.command()
@@ -250,7 +255,7 @@ async def disco(ctx):
             guild = bot.get_guild(713343823962701897)
             role = discord.utils.get(guild.roles, name="Colours")
             await role.edit(colour=newColour)
-    newColour = discord.Colour.from_rgb(242,117,55)
+    newColour = discord.Colour.from_rgb(242, 117, 55)
     await role.edit(colour=newColour)
 
 
@@ -259,7 +264,7 @@ async def disco(ctx):
 async def spam(ctx, tag, id=""):
     try:
         if type(int(tag[1])) is int:
-            if tag == "225678449790943242" or tag == "140129710268088330": #cheers <3 - S.
+            if tag == "225678449790943242" or tag == "140129710268088330":  # cheers <3 - S.
                 await ctx.send("I'm not that stupid!")
             else:
                 for i in range(20):
@@ -350,8 +355,9 @@ async def confidence(ctx, champ="None", level="None", role=""):
                     with open("champ_pools.json", "w") as file:
                         file.write(json.dumps(users, indent=3))
 
-                    await replywithembed("Done! Confidence for {}'s {} set to {}".format(ctx.message.author.name, champ, level),
-                                         ctx, COLOUR_SUCCESS)
+                    await replywithembed(
+                        "Done! Confidence for {}'s {} set to {}".format(ctx.message.author.name, champ, level),
+                        ctx, COLOUR_SUCCESS)
                     return
         else:
             continue
@@ -440,7 +446,8 @@ async def imain(ctx, role="None"):
         file.write(json.dumps(users, indent=3))
     await update("champ_pools.json", "application/json")
 
-    await replywithembed("Done! {}'s main role confirmed as {}.".format(ctx.message.author.name, role), ctx, COLOUR_SUCCESS)
+    await replywithembed("Done! {}'s main role confirmed as {}.".format(ctx.message.author.name, role), ctx,
+                         COLOUR_SUCCESS)
 
 
 # --------------------------------------------------#
@@ -540,7 +547,9 @@ async def iplay(ctx, *args):
             file.write(json.dumps(users, indent=3))
         await update("champ_pools.json", "application/json")
 
-        await replywithembed("Done! {}'s champion pool adjustments confirmed and completed.".format(ctx.message.author.name), ctx, COLOUR_SUCCESS)
+        await replywithembed(
+            "Done! {}'s champion pool adjustments confirmed and completed.".format(ctx.message.author.name), ctx,
+            COLOUR_SUCCESS)
 
         await mypool(ctx)
 
@@ -574,7 +583,8 @@ async def reporterror(errorcode=101, ctx="", data=""):
         errormsg = 'Sorry, I can\'t process this command because you\'ve supplied no champion! Please type a champ name (if you\'re using `mychamps -c, you may type several at once, but note that you\'ll need to shorten multiword names into one word [e.g. leesin, xinzhao]). I have a pretty extensive vocabulary and will try to understand a lot of them.'
     if errorcode == 105:  # bad_champ
         sizzler.warning('Internal Error 105 (non-interrupting): Expected a champ designator, received an invalid one')
-        errormsg = 'Sorry, while processing your latest request, I couldn\'t understand which champion {} would be. I\'m usually pretty good at this, but this time my vocabulary fails me.'.format(data)
+        errormsg = 'Sorry, while processing your latest request, I couldn\'t understand which champion {} would be. I\'m usually pretty good at this, but this time my vocabulary fails me.'.format(
+            data)
     if errorcode == 106:  # no_user
         sizzler.warning(
             'Internal Error 106: New user submitted a champ pool amendment without a main role to fall back on')
@@ -590,7 +600,8 @@ async def reporterror(errorcode=101, ctx="", data=""):
         errormsg = 'Sorry, I don\'t know such a command. `help lists all my commands.'
     if errorcode == 109:  # no_such_champ_in_pool
         sizzler.warning('Internal Error 109: Champion doesn\'t exist in the user\'s pool')
-        errormsg = 'Sorry, I can\'t process this command. The champion {} was not found. You may have specified the wrong role or forgot to add the champion to your pool first. In the latter case, use `iplay -c {} -r <role>'.format(data, data)
+        errormsg = 'Sorry, I can\'t process this command. The champion {} was not found. You may have specified the wrong role or forgot to add the champion to your pool first. In the latter case, use `iplay -c {} -r <role>'.format(
+            data, data)
 
     await replywithembed(errormsg, ctx, COLOUR_FAILURE)
 
@@ -652,9 +663,10 @@ async def help(ctx, cmdname=""):
 
     return
 
+
 @bot.command()
 async def terminate(ctx):
-    if ctx.message.author.id == 225678449790943242 or ctx.message.author.id == 140129710268088330: #cheers <3 -S.
+    if ctx.message.author.id == 225678449790943242 or ctx.message.author.id == 140129710268088330:  # cheers <3 -S.
         bot.close()
     else:
         await replywithembed("Yea, almost got me.", ctx)
@@ -733,21 +745,22 @@ def preprocessName(name):
 # --------------------------------------------------#
 # --------------------------------------------------#
 
-def interpretUser(ctx, value = None):
+def interpretUser(ctx, value=None):
     # value could be an ID, a nickname or a username
     # it could be a mention, so preceded by an @, or a normal name
     guild = ctx.guild
     if value == None:
         return
-    if type(value) is int: #this is an ID
+    if type(value) is int:  # this is an ID
         return "<@" + str(value) + ">"
-    elif type(value) is str: #this is a nick or a proper name potentially with discriminator
-        if value[0] == "@": #remove @ before lookup
+    elif type(value) is str:  # this is a nick or a proper name potentially with discriminator
+        if value[0] == "@":  # remove @ before lookup
             value = value[1:]
         return guild.get_member_named(value).mention()
     else:
         logger.info("User interpretation failed, supplied value is of the wrong type")
         return
+
 
 # --------------------------------------------------#
 # --------------------------------------------------#
