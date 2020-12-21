@@ -22,15 +22,17 @@ gauth.LocalWebserverAuth()
 drive = GoogleDrive(gauth)
 service = build('drive', 'v3', credentials=gauth.credentials)
 
-logger = logging.getLogger("galactical_bot")
-logging.basicConfig(format='[%(asctime)s.%(msecs)d] /%(name)s/ [%(levelname)s] %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
+sizzler = logging.getLogger("intbot.bot.sizzle")
+logger = logging.getLogger("intbot.bot")
+logging.basicConfig(format='[%(asctime)s.%(msecs)d] [%(levelname)s] /%(name)s/ %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 
 ROLEFILTER = "^(top|jgl|mid|bot|sup|jungle|middle|bottom|support|toplane|midlane|botlane|jg|jung|adc|adcarry|supp)"
 COMMANDS = [ "hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate" ]
 COLOUR_SUCCESS = 0x00FF00
 COLOUR_FAILURE = 0xFF0000
+COLOUR_DEFAULT = 0x7289da
 
-bot = commands.Bot(command_prefix='.')
+bot = commands.Bot(command_prefix='.', intents=discord.Intents.default())
 fp = open("phirdchamp.png", "rb")
 pfp = fp.read()
 
@@ -49,9 +51,8 @@ async def timer():
     while True:
         time = dt.datetime.now()
         if time.hour == 18 and time.minute == 0 and time.second == 0 and msg_sent is False:
-            print("send")
-            await channel.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
-            await channel.send("<@140129710268088330> Daily Reminder!")
+            #shortened this to call remind
+            remind(ctx)
             msg_sent = True
         elif time.minute == 0 and time.second == 0 and refresh is False:
             gauth.Refresh()
@@ -71,7 +72,7 @@ async def upload(target, mimeType = "text/csv"):
 async def download(target):
     fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
     for file in fileList:
-        logger.info('Title: %s, ID: %s' % (file['title'], file['id']))
+        logger.info('Google Drive File: %s, ID: %s' % (file['title'], file['id']))
         # Get the folder ID that you want
         if (file['title'] == target):
             fileID = file['id']
@@ -83,16 +84,19 @@ async def download(target):
         status, done = downloader.next_chunk()
         logger.info("Download %d%%." % int(status.progress() * 100))
     fh.seek(0)
-    #TODO REGEXP
-    if target[-1] == "v":
+    extension = re.search("(\.[a-z]*)$", target).group()[1:]
+    #pitfall: group() can fail if the search fails. But search should only fail on names without extensions, and those would error on the google drive search before this line is even reached, so I'm keeping it short and risky with no error handling - S.
+    if extension == "csv":
         return fh
-    elif target[-1] == "n":
+    elif extension == "json":
         return fh.getvalue()
+    else:
+        return fh
 
 async def update(target, mimeType = "text/csv"):
     fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
     for file in fileList:
-        logger.info('Title: %s, ID: %s' % (file['title'], file['id']))
+        logger.info('Google Drive File: %s, ID: %s' % (file['title'], file['id']))
         # Get the folder ID that you want
         if (file['title'] == target):
             fileID = file['id']
@@ -100,11 +104,16 @@ async def update(target, mimeType = "text/csv"):
     request = service.files().update(fileId=fileID, media_body=target, media_mime_type=mimeType).execute()
 
     os.remove(target)
+
 @bot.command()
-async def remind(ctx):
-    print("send")
-    await replywithembed("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif", ctx)
-    await replywithembed("<@140129710268088330> Daily Reminder!", ctx)
+async def remind(ctx, user = 140129710268088330):
+    #rewrote this a bit
+    #user accepts nickname, username or UID
+    #by default it's me, so normal .remind's work as usual - S.
+    user = interpretUser(ctx, user)
+    logger.info("Reminding %s", user)
+    await ctx.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
+    await replywithembed(f"{user} Daily Reminder!", ctx)
 
 
 @bot.command()
@@ -178,14 +187,16 @@ async def list(ctx):
 
 
 @bot.command()
-async def bday(ctx):
+async def bday(ctx, user = 140129710268088330):
+    #same ol' thingamajig here; now accepts user as an argument
+    user = interpretUser(ctx, user)
     for server in bot.guilds:
-        print(server.name)
+        logger.info(server.name)
         for channel in server.channels:
             if channel.type == discord.ChannelType.text:
                 for i in range(10):
                     await channel.send("https://cdn.discordapp.com/attachments/498040249218236416/780150571197005824/bday.gif")
-                await channel.send("<@140129710268088330> Happy Birthday!")
+                await channel.send(f"{user} Happy Birthday!")
 
 
 @bot.command()
@@ -217,7 +228,7 @@ async def disco(ctx):
 async def spam(ctx, tag, id=""):
     try:
         if type(int(tag[1])) is int:
-            if tag == "225678449790943242":
+            if tag == "225678449790943242" or tag == "140129710268088330": #cheers <3 - S.
                 await ctx.send("I'm not that stupid!")
             else:
                 for i in range(20):
@@ -270,7 +281,7 @@ async def confidence(ctx, champ="None", level="None", role=""):
             try:
                 role
             except NameError:
-                logger.info("CONFIDENCE: Role not found, iterating on every instance of the champ")
+                sizzler.info("CONFIDENCE: Role not found, iterating on every instance of the champ")
             finally:
                 # if role exists
                 # if it doesn't, we gotta sweep through everything
@@ -331,11 +342,10 @@ async def mypool(ctx):
 """  # compatible newline; \n might not work inside ``` code syntax
     output = "```ml"
 
-    print("About to open file")
-    logger.info("About to open file")
+    sizzler.info("About to open file")
     file = await download("champ_pools.json")
     users = json.loads(file)
-    logger.info("File opened, users loaded %s" % users)
+    sizzler.debug("File opened, users loaded %s" % users)
     for index in users:
         if users[index]['UID'] == str(ctx.message.author.id):
             table = users[index]["roles"]
@@ -427,7 +437,7 @@ async def iplay(ctx, *args):
 
     if " -c" in args or " -champs" in args or " -champions" in args:
         champs = re.search("-(c|champs)(\s+(\w+)(a{0}|,|;))+", args)  # ({0}|,|;)
-        logger.info("champs: %s" % champs.group())
+        sizzler.info("champs: %s" % champs.group())
         if champs == None:  # arg supplied but no actual champs, throw error 104
             await reporterror(104, ctx)
             return
@@ -517,38 +527,38 @@ async def reporterror(errorcode=101, ctx="", data=""):
     errormsg = " "
 
     if errorcode == 100 or ctx == "":  # no_channel
-        logger.error('Internal Error 100: Attempting to message or report an error without a destination channel')
+        sizzler.error('Internal Error 100: Attempting to message or report an error without a destination channel')
         return
     if errorcode == 101:  # generic
-        logger.warning('Internal Error 101: Generic Error')
+        sizzler.warning('Internal Error 101: Generic Error')
         errormsg = 'Sorry, I can\'t process this command. There\'s been a generic error.'
     if errorcode == 102:  # no_role
-        logger.warning('Internal Error 102: Expected a role designator and received none')
+        sizzler.warning('Internal Error 102: Expected a role designator and received none')
         errormsg = 'Sorry, I can\'t process this command because you\'ve supplied no role! Make sure to specify which role you are referring to; valid ones are top, jgl, mid, bot, sup, jungle, middle, bottom, support, toplane, midlane, botlane, jg, jung, adc, adcarry, supp.'
     if errorcode == 103:  # bad_role
-        logger.warning('Internal Error 103: Expected a role designator, received an invalid one')
+        sizzler.warning('Internal Error 103: Expected a role designator, received an invalid one')
         errormsg = 'Sorry, I can\'t process this command because you\'ve supplied an invalid role! Please check that the role is valid, aka one of: top, jgl, mid, bot, sup, jungle, middle, bottom, support, toplane, midlane, botlane, jg, jung, adc, adcarry, supp.'
     if errorcode == 104:  # no_champ
-        logger.warning('Internal Error 104: Expected a champ designator and received none')
+        sizzler.warning('Internal Error 104: Expected a champ designator and received none')
         errormsg = 'Sorry, I can\'t process this command because you\'ve supplied no champion! Please type a champ name (if you\'re using `mychamps -c, you may type several at once, but note that you\'ll need to shorten multiword names into one word [e.g. leesin, xinzhao]). I have a pretty extensive vocabulary and will try to understand a lot of them.'
     if errorcode == 105:  # bad_champ
-        logger.warning('Internal Error 105 (non-interrupting): Expected a champ designator, received an invalid one')
+        sizzler.warning('Internal Error 105 (non-interrupting): Expected a champ designator, received an invalid one')
         errormsg = 'Sorry, while processing your latest request, I couldn\'t understand which champion {} would be. I\'m usually pretty good at this, but this time my vocabulary fails me.'.format(data)
     if errorcode == 106:  # no_user
-        logger.warning(
+        sizzler.warning(
             'Internal Error 106: New user submitted a champ pool amendment without a main role to fall back on')
         errormsg = 'Sorry, I can\'t process this command. As a new Galactical user, you need to be registered into the file; for that, I need to know your main role, in case you\'ll submit champs without specifying which role you\'ll be playing them in. Please use `imain <role> to specify your main role, then try again.'
     if errorcode == 107:  # incorrect_syntax
-        logger.warning('Internal Error 107: Received command with bad arguments')
+        sizzler.warning('Internal Error 107: Received command with bad arguments')
         errormsg = 'Sorry, I can\'t process this command. I need arguments that haven\'t been supplied. See below: '
         await replywithembed(errormsg, ctx, COLOUR_FAILURE)
         await help(ctx, data)
         return
     if errorcode == 108:  # unrecognized_command
-        logger.warning('Internal Error 108: Received unrecognized command')
+        sizzler.warning('Internal Error 108: Received unrecognized command')
         errormsg = 'Sorry, I don\'t know such a command. `help lists all my commands.'
     if errorcode == 109:  # no_such_champ_in_pool
-        logger.warning('Internal Error 109: Champion doesn\'t exist in the user\'s pool')
+        sizzler.warning('Internal Error 109: Champion doesn\'t exist in the user\'s pool')
         errormsg = 'Sorry, I can\'t process this command. The champion {} was not found. You may have specified the wrong role or forgot to add the champion to your pool first. In the latter case, use `iplay -c {} -r <role>'.format(data, data)
 
     await replywithembed(errormsg, ctx, COLOUR_FAILURE)
@@ -557,7 +567,7 @@ async def reporterror(errorcode=101, ctx="", data=""):
 # --------------------------------------------------#
 # --------------------------------------------------#
 @bot.command()
-async def replywithembed(content="I'm supposed to send an empty message? Odd.", ctx="", colour=0x7289da):
+async def replywithembed(content="I'm supposed to send an empty message? Odd.", ctx="", colour=COLOUR_DEFAULT):
     # send a cute embed-formatted message
     if ctx == "":
         await reporterror(100)
@@ -613,7 +623,7 @@ async def help(ctx, cmdname=""):
 
 @bot.command()
 async def terminate(ctx):
-    if ctx.message.author.id == 225678449790943242:
+    if ctx.message.author.id == 225678449790943242 or ctx.message.author.id == 140129710268088330: #cheers <3 -S.
         bot.close()
     else:
         await replywithembed("Yea, almost got me.", ctx)
@@ -688,6 +698,25 @@ def preprocessName(name):
         result = name.lower().replace("the", "")
     return result.replace(" ", "").replace('\'', "").replace("-", "")
 
+
+# --------------------------------------------------#
+# --------------------------------------------------#
+
+def interpretUser(ctx, value = None):
+    # value could be an ID, a nickname or a username
+    # it could be a mention, so preceded by an @, or a normal name
+    guild = ctx.guild
+    if value == None:
+        return
+    if type(value) is int: #this is an ID
+        return "<@" + str(value) + ">"
+    elif type(value) is str: #this is a nick or a proper name potentially with discriminator
+        if value[0] == "@": #remove @ before lookup
+            value = value[1:]
+        return guild.get_member_named(value).mention()
+    else:
+        logger.info("User interpretation failed, supplied value is of the wrong type")
+        return
 
 # --------------------------------------------------#
 # --------------------------------------------------#
