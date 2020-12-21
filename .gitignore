@@ -1,4 +1,1 @@
-credentials.json
-champ_pools.json
-champs.json
-media.csv
+*.json

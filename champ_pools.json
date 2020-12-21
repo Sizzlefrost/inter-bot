@@ -19,11 +19,11 @@
          ],
          "jungle": [
             {
-               "confidence": "normal",
+               "confidence": "shaky",
                "name": "Karthus"
             },
             {
-               "confidence": "normal",
+               "confidence": "comfort",
                "name": "Shyvana"
             },
             {
