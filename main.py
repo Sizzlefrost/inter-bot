@@ -24,16 +24,17 @@ service = build('drive', 'v3', credentials=gauth.credentials)
 
 sizzler = logging.getLogger("intbot.bot.sizzle")
 logger = logging.getLogger("intbot.bot")
-logging.basicConfig(format='[%(asctime)s.%(msecs)d] [%(levelname)s] /%(name)s/ %(message)s',
-                    datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
+logging.basicConfig(format='[%(asctime)s.%(msecs)d] [%(levelname)s] /%(name)s/ %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 
 ROLEFILTER = "^(top|jgl|mid|bot|sup|jungle|middle|bottom|support|toplane|midlane|botlane|jg|jung|adc|adcarry|supp)"
-COMMANDS = ["hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate"]
+COMMANDS = [ "hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate" ]
 COLOUR_SUCCESS = 0x00FF00
 COLOUR_FAILURE = 0xFF0000
 COLOUR_DEFAULT = 0x7289da
 
-bot = commands.Bot(command_prefix='.', intents=discord.Intents.default())
+intents = discord.Intents.default()
+intents.members = True
+bot = commands.Bot(command_prefix='.', intents=intents)
 fp = open("phirdchamp.png", "rb")
 pfp = fp.read()
 
@@ -66,25 +67,21 @@ async def timer():
 
 @bot.command()
 @commands.has_role(777947935698583562)
-async def mute(ctx, id):
-    id = int(id)
-    server = bot.get_guild(ctx.guild.id)
-    user = await server.fetch_member(id)
+async def mute(ctx, user):
+    user = interpretUser(ctx, user)
     role = discord.utils.get(ctx.message.guild.roles, name="MUTED")
     await user.add_roles(role)
-    reply = f"{user} has been muted"
+    reply = f"{user.name} has been muted"
     await replywithembed(reply, ctx)
 
 
 @bot.command()
 @commands.has_role(777947935698583562)
-async def unmute(ctx, id):
-    id = int(id)
-    server = bot.get_guild(ctx.guild.id)
-    user = await server.fetch_member(id)
+async def unmute(ctx, user):
+    user = interpretUser(ctx, user)
     role = discord.utils.get(ctx.message.guild.roles, name="MUTED")
     await user.remove_roles(role)
-    reply = f"{user} has been unmuted"
+    reply = f"{user.name} has been unmuted"
     await replywithembed(reply, ctx)
 
 
@@ -135,14 +132,16 @@ async def update(target, mimeType="text/csv"):
 
 @bot.command()
 @commands.has_role(789912991159418937)
-async def remind(ctx, user=140129710268088330):
+async def remind(ctx, user=None):
     # rewrote this a bit
     # user accepts nickname, username or UID
     # by default it's me, so normal .remind's work as usual - S.
+    if user == None: #assignment has to be done manually to avoid a TypeError
+        user = 140129710268088330
     user = interpretUser(ctx, user)
-    logger.info("Reminding %s", user)
+    logger.info("Reminding %s", user.name)
     await ctx.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
-    await replywithembed(f"{user} Daily Reminder!", ctx)
+    await replywithembed(f"{user.mention} Daily Reminder!", ctx)
 
 
 @bot.command()
@@ -227,8 +226,7 @@ async def bday(ctx, user=140129710268088330):
         for channel in server.channels:
             if channel.type == discord.ChannelType.text:
                 for i in range(10):
-                    await channel.send(
-                        "https://cdn.discordapp.com/attachments/498040249218236416/780150571197005824/bday.gif")
+                    await channel.send("https://cdn.discordapp.com/attachments/498040249218236416/780150571197005824/bday.gif")
                 await channel.send(f"{user} Happy Birthday!")
 
 
@@ -355,9 +353,7 @@ async def confidence(ctx, champ="None", level="None", role=""):
                     with open("champ_pools.json", "w") as file:
                         file.write(json.dumps(users, indent=3))
 
-                    await replywithembed(
-                        "Done! Confidence for {}'s {} set to {}".format(ctx.message.author.name, champ, level),
-                        ctx, COLOUR_SUCCESS)
+                    await replywithembed("Done! Confidence for {}'s {} set to {}".format(ctx.message.author.name, champ, level), ctx, COLOUR_SUCCESS)
                     return
         else:
             continue
@@ -583,8 +579,7 @@ async def reporterror(errorcode=101, ctx="", data=""):
         errormsg = 'Sorry, I can\'t process this command because you\'ve supplied no champion! Please type a champ name (if you\'re using `mychamps -c, you may type several at once, but note that you\'ll need to shorten multiword names into one word [e.g. leesin, xinzhao]). I have a pretty extensive vocabulary and will try to understand a lot of them.'
     if errorcode == 105:  # bad_champ
         sizzler.warning('Internal Error 105 (non-interrupting): Expected a champ designator, received an invalid one')
-        errormsg = 'Sorry, while processing your latest request, I couldn\'t understand which champion {} would be. I\'m usually pretty good at this, but this time my vocabulary fails me.'.format(
-            data)
+        errormsg = 'Sorry, while processing your latest request, I couldn\'t understand which champion {} would be. I\'m usually pretty good at this, but this time my vocabulary fails me.'.format(data)
     if errorcode == 106:  # no_user
         sizzler.warning(
             'Internal Error 106: New user submitted a champ pool amendment without a main role to fall back on')
@@ -600,8 +595,7 @@ async def reporterror(errorcode=101, ctx="", data=""):
         errormsg = 'Sorry, I don\'t know such a command. `help lists all my commands.'
     if errorcode == 109:  # no_such_champ_in_pool
         sizzler.warning('Internal Error 109: Champion doesn\'t exist in the user\'s pool')
-        errormsg = 'Sorry, I can\'t process this command. The champion {} was not found. You may have specified the wrong role or forgot to add the champion to your pool first. In the latter case, use `iplay -c {} -r <role>'.format(
-            data, data)
+        errormsg = 'Sorry, I can\'t process this command. The champion {} was not found. You may have specified the wrong role or forgot to add the champion to your pool first. In the latter case, use `iplay -c {} -r <role>'.format(data, data)
 
     await replywithembed(errormsg, ctx, COLOUR_FAILURE)
 
@@ -748,15 +742,15 @@ def preprocessName(name):
 def interpretUser(ctx, value=None):
     # value could be an ID, a nickname or a username
     # it could be a mention, so preceded by an @, or a normal name
-    guild = ctx.guild
+    # returns "<@IDINTEGER>"
     if value == None:
-        return
+        return None
     if type(value) is int:  # this is an ID
-        return "<@" + str(value) + ">"
+        return ctx.guild.get_member(value)
     elif type(value) is str:  # this is a nick or a proper name potentially with discriminator
         if value[0] == "@":  # remove @ before lookup
             value = value[1:]
-        return guild.get_member_named(value).mention()
+        return ctx.guild.get_member_named(value)
     else:
         logger.info("User interpretation failed, supplied value is of the wrong type")
         return
