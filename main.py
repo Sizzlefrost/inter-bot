@@ -1,20 +1,21 @@
-import discord
+import discord #discord.py and its usability-improving extension.
 from discord.ext import commands
-import datetime as dt
-import asyncio
-import csv
-import random
-import time
-import re
-import logging
-import json
+import datetime as dt #duh. Handles dates and times.
+import asyncio #We use this for sleeps, but there's more than can be done too.
+import csv #Handles the CSV format.
+import random #duh. RNG.
+import time #duh. Makes time counters.
+import re #Regular Expressions. Basically, custom checks for strings.
+import logging #Extremely buff printf.
+import json #duh. Handles JSONs.
 
-from pydrive.auth import GoogleAuth
+from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-import io
-import os
+import io #duh. Input/Output.
+import os #duh. Operating System operations (deleting files, joining paths)
+import shutil #advanced operating system operations (copying files)
 
 gauth = GoogleAuth()
 gauth.LoadClientConfigSettings()
@@ -93,28 +94,46 @@ async def upload(target, mimeType="text/csv"):
 
 
 async def download(target):
-    fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
-    for file in fileList:
-        logger.info('Google Drive File: %s, ID: %s' % (file['title'], file['id']))
+    #fileList = drive.ListFile({'q': "trashed=false"}).GetList()
+    fileList = service.files().list().execute()["files"]
+    file_List = fileList
+    while "nextPageToken" in fileList:
+        fileList = service.files().list(pageToken=fileList["nextPageToken"]).execute()
+        file_List = file_List + fileList["files"]
+    for file in file_List:
+        logger.info('Google Drive File: %s, ID: %s' % (file['name'], file['id']))
         # Get the folder ID that you want
-        if (file['title'] == target):
+        if (file['name'] == target):
             fileID = file['id']
-    request = service.files().get_media(fileId=fileID)
-    fh = io.BytesIO()
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-        logger.info("Download %d%%." % int(status.progress() * 100))
-    fh.seek(0)
-    extension = re.search("(\.[a-z]*)$", target).group()[1:]
-    # pitfall: group() can fail if the search fails. But search should only fail on names without extensions, and those would error on the google drive search before this line is even reached, so I'm keeping it short and risky with no error handling - S.
-    if extension == "csv":
-        return fh
-    elif extension == "json":
-        return fh.getvalue()
+    try:
+        fileID
+    except NameError:
+        #we try to access a local backup; this can be out of date, but it'll have to do
+        #if that doesn't exist either, welp, we have to error out with no file found
+        logger.warning(f'Could not download file {target}, checking for a potentially outdated local backup')
+        try:
+            with open("backups/"+target) as file:
+                return file.read()
+        except FileNotFoundError:
+            logger.warning(f'Local backup not found either; alerting user and passing None')
+            return None
     else:
-        return fh
+        request = service.files().get_media(fileId=fileID)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            logger.info("Download %d%%." % int(status.progress() * 100))
+        fh.seek(0)
+        # pitfall: group() can fail if the search fails. But search should only fail on names without extensions, and those would error on the google drive search before this line is even reached, so I'm keeping it short and risky with no error handling - S.
+        extension = re.search("(\.[a-z]*)$", target).group()[1:]
+        if extension == "csv":
+            return fh
+        elif extension == "json":
+            return fh.getvalue()
+        else:
+            return fh
 
 
 async def update(target, mimeType="text/csv"):
@@ -127,8 +146,11 @@ async def update(target, mimeType="text/csv"):
 
     request = service.files().update(fileId=fileID, media_body=target, media_mime_type=mimeType).execute()
 
+    #improved this
+    #copies the file into backups folder while preserving all metadata
+    #should keep backups more up-to-date, though this is still not guaranteed; there's a reason we try drive first! - S.
+    shutil.copy2(target, 'backups')
     os.remove(target)
-
 
 @bot.command()
 @commands.has_role(789912991159418937)
@@ -352,6 +374,7 @@ async def confidence(ctx, champ="None", level="None", role=""):
                     # upload to file
                     with open("champ_pools.json", "w") as file:
                         file.write(json.dumps(users, indent=3))
+                    await update("champ_pools.json", "application/json")
 
                     await replywithembed("Done! Confidence for {}'s {} set to {}".format(ctx.message.author.name, champ, level), ctx, COLOUR_SUCCESS)
                     return
