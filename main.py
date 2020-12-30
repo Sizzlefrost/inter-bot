@@ -36,13 +36,10 @@ COLOUR_DEFAULT = 0x7289da
 intents = discord.Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix='.', intents=intents)
-fp = open("phirdchamp.png", "rb")
-pfp = fp.read()
 
 
 @bot.event
 async def on_ready():
-    await bot.user.edit(avatar=pfp)
     logger.info('{0.user} running it down.'.format(bot))
 
 
@@ -137,11 +134,17 @@ async def download(target):
 
 
 async def update(target, mimeType="text/csv"):
-    fileList = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
+    #fileList = drive.ListFile({'q': "trashed=false", "maxResults": 3}).GetList()
+    fileList = service.files().list().execute()["files"]
+    file_List = fileList
+    while "nextPageToken" in fileList:
+        fileList = service.files().list(pageToken=fileList["nextPageToken"].execute())
+        file_List = file_List + fileList["files"]
+    logger.info(fileList)
     for file in fileList:
-        logger.info('Google Drive File: %s, ID: %s' % (file['title'], file['id']))
+        logger.info('Google Drive File: %s, ID: %s' % (file['name'], file['id']))
         # Get the folder ID that you want
-        if (file['title'] == target):
+        if (file['name'] == target):
             fileID = file['id']
 
     request = service.files().update(fileId=fileID, media_body=target, media_mime_type=mimeType).execute()
@@ -151,6 +154,12 @@ async def update(target, mimeType="text/csv"):
     #should keep backups more up-to-date, though this is still not guaranteed; there's a reason we try drive first! - S.
     shutil.copy2(target, 'backups')
     os.remove(target)
+
+
+@bot.command()
+async def hi(ctx):
+    await replywithembed(f"Hi {ctx.message.author.mention}, I'm Thresh!", ctx)
+
 
 @bot.command()
 @commands.has_role(789912991159418937)
@@ -281,7 +290,7 @@ async def disco(ctx):
 
 @bot.command()
 @commands.has_role(789912991159418937)
-async def spam(ctx, tag, id=""):
+async def spam(ctx, tag, *args):
     try:
         if type(int(tag[1])) is int:
             if tag == "225678449790943242" or tag == "140129710268088330":  # cheers <3 - S.
@@ -290,18 +299,22 @@ async def spam(ctx, tag, id=""):
                 for i in range(20):
                     await ctx.send(f"<@{tag}>")
     except:
-        if id == "":
-            for i in range(10):
-                await ctx.send(tag)
-        else:
+        if tag[0] == ".":
+            file = await download("media.csv")
+            with open("media.csv", "wb") as f:
+                f.write(file.read())
+                f.close()
             with open("media.csv", "r+", newline="") as csvfile:
                 reader = csv.reader(csvfile, delimiter=",", quotechar="|")
                 media = " "
                 for row in reader:
-                    if row[0] == id:
+                    if row[0] == " ".join(args[:]):
                         media = row[1]
                 for i in range(10):
                     await ctx.send(media)
+        else:
+            for i in range(10):
+                await ctx.send(tag + " " + " ".join(args))
 
 
 # --------------------------------------------------#
