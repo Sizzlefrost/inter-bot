@@ -36,12 +36,14 @@ COLOUR_DEFAULT = 0x7289da
 intents = discord.Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix='.', intents=intents)
-
+fp = open("thresh.png", "rb")
+pfp = fp.read()
 
 @bot.event
 async def on_ready():
+    if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
+        await bot.user.edit(avatar=pfp)
     logger.info('{0.user} running it down.'.format(bot))
-
 
 async def timer():
     await bot.wait_until_ready()
@@ -81,6 +83,28 @@ async def unmute(ctx, user):
     await user.remove_roles(role)
     reply = f"{user.name} has been unmuted"
     await replywithembed(reply, ctx)
+
+
+@bot.command()
+async def yearly(ctx):
+    await ctx.send("https://i.imgur.com/AeFVIny.jpg?1")
+    await ctx.send("https://i.ytimg.com/vi/LdKpaGRWSE8/hqdefault.jpg")
+    await ctx.send("https://pics.me.me/evolution-of-trash-over-the-years-2000-2001-1995-2006-58207524.png")
+    await ctx.send("https://i2.wp.com/digagami.com/wp-content/uploads/2019/04/Trash.jpg?fit=1024%2C576&ssl=1")
+    await ctx.send("Why do you even play this game? <@140129710268088330>")
+
+
+@bot.command()
+@commands.has_role(777947935698583562)
+async def check(ctx):
+    file = await download("media.csv")
+    with open("media.csv", "wb") as f:
+        f.write(file.read())
+        f.close()
+    with open("media.csv", "r+", newline="") as csvfile:
+        reader = csv.reader(csvfile, delimiter=",", quotechar="|")
+        for row in reader:
+            await ctx.send(row[1])
 
 
 async def upload(target, mimeType="text/csv"):
