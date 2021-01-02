@@ -306,30 +306,32 @@ async def disco(ctx):
 @bot.command()
 @commands.has_role(789912991159418937)
 async def spam(ctx, tag, *args):
-    try:
-        if type(int(tag[1])) is int:
-            if tag == "225678449790943242" or tag == "140129710268088330":  # cheers <3 - S.
-                await ctx.send("I'm not that stupid!")
-            else:
-                for i in range(20):
-                    await ctx.send(f"<@{tag}>")
-    except:
-        if tag[0] == ".":
-            file = await download("media.csv")
-            with open("media.csv", "wb") as f:
-                f.write(file.read())
-                f.close()
-            with open("media.csv", "r+", newline="") as csvfile:
-                reader = csv.reader(csvfile, delimiter=",", quotechar="|")
-                media = " "
-                for row in reader:
-                    if row[0] == " ".join(args[:]):
-                        media = row[1]
-                for i in range(10):
-                    await ctx.send(media)
+    if tag.isnumeric():
+        print("Tag")
+        if tag == "225678449790943242" or tag == "140129710268088330":  # cheers <3 - S.
+            await ctx.send("I'm not that stupid!")
         else:
+            for i in range(20):
+                await ctx.send(f"<@{tag}>")
+    elif tag[0] == ".":
+        print("Media")
+        file = await download("media.csv")
+        with open("media.csv", "wb") as f:
+            f.write(file.read())
+            f.close()
+        with open("media.csv", "r+", newline="") as csvfile:
+            reader = csv.reader(csvfile, delimiter=",", quotechar="|")
+            media = " "
+            print(args[0])
+            for row in reader:
+                if row[0] == args[0]:
+                    media = row[1]
             for i in range(10):
-                await ctx.send(tag + " " + " ".join(args))
+                await ctx.send(media + " " + " ".join(args[1:]))
+    else:
+        print("String")
+        for i in range(10):
+            await ctx.send(tag + " " + " ".join(args))
 
 
 # --------------------------------------------------#
