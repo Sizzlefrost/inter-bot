@@ -86,15 +86,6 @@ async def unmute(ctx, user):
 
 
 @bot.command()
-async def yearly(ctx):
-    await ctx.send("https://i.imgur.com/AeFVIny.jpg?1")
-    await ctx.send("https://i.ytimg.com/vi/LdKpaGRWSE8/hqdefault.jpg")
-    await ctx.send("https://pics.me.me/evolution-of-trash-over-the-years-2000-2001-1995-2006-58207524.png")
-    await ctx.send("https://i2.wp.com/digagami.com/wp-content/uploads/2019/04/Trash.jpg?fit=1024%2C576&ssl=1")
-    await ctx.send("Why do you even play this game? <@140129710268088330>")
-
-
-@bot.command()
 @commands.has_role(777947935698583562)
 async def check(ctx):
     file = await download("media.csv")
