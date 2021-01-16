@@ -4,10 +4,12 @@ from discord.ext import tasks
 import os
 import sys
 import logging
+import logging.config
+import logging.handlers
+
+logging.config.fileConfig('logging.conf')
 
 logger = logging.getLogger("intbot.status")
-logging.basicConfig(format='[%(asctime)s.%(msecs)d] [%(levelname)s] /%(name)s/ %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
-#added proper logging, you'd be surprised how much timestamps help - S.
 
 bot = discord.Client(intents=discord.Intents.all())
 bot.go = False

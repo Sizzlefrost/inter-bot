@@ -7,7 +7,10 @@ import random #duh. RNG.
 import time #duh. Makes time counters.
 import re #Regular Expressions. Basically, custom checks for strings.
 import logging #Extremely buff printf.
+import logging.config #even more buff printf stuff: take config from a file and output to file etc.
+import logging.handlers
 import json #duh. Handles JSONs.
+import getmac #unique device identification
 
 from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
@@ -23,9 +26,9 @@ gauth.LocalWebserverAuth()
 drive = GoogleDrive(gauth)
 service = build('drive', 'v3', credentials=gauth.credentials)
 
+logging.config.fileConfig('logging.conf')
 sizzler = logging.getLogger("intbot.bot.sizzle")
 logger = logging.getLogger("intbot.bot")
-logging.basicConfig(format='[%(asctime)s.%(msecs)d] [%(levelname)s] /%(name)s/ %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 
 ROLEFILTER = "^(top|jgl|mid|bot|sup|jungle|middle|bottom|support|toplane|midlane|botlane|jg|jung|adc|adcarry|supp)"
 COMMANDS = [ "hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate" ]
@@ -39,10 +42,19 @@ bot = commands.Bot(command_prefix='.', intents=intents)
 fp = open("thresh.png", "rb")
 pfp = fp.read()
 
+self_mac = getmac.get_mac_address()
+
 @bot.event
 async def on_ready():
     if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
         await bot.user.edit(avatar=pfp)
+    logger.info(f'Self mac address {self_mac}')
+    if self_mac == "00:d8:61:14:48:d3": #alex
+    	botstatus = discord.Game("without you")
+    elif self_mac == "2c:f0:5d:24:ac:02": #sizzle
+    	botstatus = discord.Game("with souls")
+    if bot.activity != botstatus:
+    	await bot.change_presence(status=discord.Status.online, activity=botstatus)
     logger.info('{0.user} running it down.'.format(bot))
 
 async def timer():
