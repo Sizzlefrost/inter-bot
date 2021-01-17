@@ -44,13 +44,15 @@ pfp = fp.read()
 
 self_mac = getmac.get_mac_address()
 
+os.system("title Thresh (intbot)")
+
 @bot.event
 async def on_ready():
     if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
     if self_mac == "00:d8:61:14:48:d3": #alex
-    	botstatus = discord.Game("without you")
+    	botstatus = discord.Activity(type=discord.ActivityType.listening, name="no one") 
     elif self_mac == "2c:f0:5d:24:ac:02": #sizzle
     	botstatus = discord.Game("with souls")
     if bot.activity != botstatus:

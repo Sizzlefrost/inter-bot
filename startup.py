@@ -19,6 +19,8 @@ bot.IDself = 713343823962701897
 bot.IDbot = 785566806509223939
 #while we're at it, store own and bot's IDs in there, that way can change them everywhere from here
 
+os.system("title Thresh (status)")
+
 @bot.event
 async def on_ready():
     logger.info("Status checker now online")
