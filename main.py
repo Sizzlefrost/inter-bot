@@ -731,6 +731,7 @@ async def help(ctx, cmdname=""):
 @bot.command()
 async def terminate(ctx):
     if ctx.message.author.id == 225678449790943242 or ctx.message.author.id == 140129710268088330:  # cheers <3 -S.
+        await replywithembed("Bot Terminating", ctx)
         bot.close()
     else:
         await replywithembed("Yea, almost got me.", ctx)
