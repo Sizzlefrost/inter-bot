@@ -186,8 +186,11 @@ async def update(target, mimeType="text/csv"):
 
 
 @bot.command()
-async def hi(ctx):
-    await replywithembed(f"Hi {ctx.message.author.mention}, I'm Thresh!", ctx)
+async def hi(ctx, user=None):
+    if user is None:
+        await replywithembed(f"Hi {ctx.message.author.mention}, I'm Thresh!", ctx)
+    else:
+        await replywithembed(f"Hi {user}, I'm Thresh!", ctx)
 
 
 @bot.command()
