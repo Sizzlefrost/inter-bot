@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 import asyncio
-from discord.ext import tasks
 import os
 import sys
 import logging
@@ -12,7 +11,7 @@ logging.config.fileConfig('logging.conf')
 
 logger = logging.getLogger("intbot.status")
 
-bot = commands.Bot(commands_prefix='-', intents=discord.Intents.all())
+bot = commands.Bot(command_prefix='.', intents=discord.Intents.all())
 bot.go = False
 #instead of global, ended up storing go locally in the class that was conveniently handed to us
 #just as readable, but better efficiency & compatibility - S.
@@ -53,7 +52,7 @@ async def run():
 
 
 @bot.command()
-async def force():
+async def force(ctx):
     logger.info("Forced start of IntBot")
     bot.go = True
 
