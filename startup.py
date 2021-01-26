@@ -58,7 +58,7 @@ async def force(ctx):
         logger.info("Alex forced start of IntBot")
         bot.go = True
     if (ctx.message.author.id == 140129710268088330 and getmac.get_mac_address() == "2c:f0:5d:24:ac:02"):
-        logger.info("Alex forced start of IntBot")
+        logger.info("Siz forced start of IntBot")
         bot.go = True
 
 
