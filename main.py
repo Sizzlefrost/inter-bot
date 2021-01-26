@@ -52,11 +52,11 @@ async def on_ready():
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
     if self_mac == "00:d8:61:14:48:d3": #alex
-    	botstatus = discord.Activity(type=discord.ActivityType.listening, name="no one") 
+        botstatus = discord.Activity(type=discord.ActivityType.listening, name="no one")
     elif self_mac == "2c:f0:5d:24:ac:02": #sizzle
-    	botstatus = discord.Game("with souls")
+        botstatus = discord.Game("with souls")
     if bot.activity != botstatus:
-    	await bot.change_presence(status=discord.Status.online, activity=botstatus)
+        await bot.change_presence(status=discord.Status.online, activity=botstatus)
     logger.info('{0.user} running it down.'.format(bot))
 
 async def timer():
@@ -736,6 +736,11 @@ async def terminate(ctx):
     else:
         await replywithembed("Yea, almost got me.", ctx)
 
+
+@bot.command()
+@commands.has_role(777947935698583562)
+async def force(ctx):
+    await terminate(ctx)
 
 # --------------------------------------------------#
 # --------------------------------------------------#

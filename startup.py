@@ -6,6 +6,7 @@ import sys
 import logging
 import logging.config
 import logging.handlers
+import getmac
 
 logging.config.fileConfig('logging.conf')
 
@@ -53,8 +54,12 @@ async def run():
 
 @bot.command()
 async def force(ctx):
-    logger.info("Forced start of IntBot")
-    bot.go = True
+    if (ctx.message.author.id == 225678449790943242 and getmac.get_mac_address() == "00:d8:61:14:48:d3"):
+        logger.info("Alex forced start of IntBot")
+        bot.go = True
+    if (ctx.message.author.id == 140129710268088330 and getmac.get_mac_address() == "2c:f0:5d:24:ac:02"):
+        logger.info("Alex forced start of IntBot")
+        bot.go = True
 
 
 bot.loop.create_task(run())
