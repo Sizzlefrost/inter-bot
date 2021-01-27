@@ -36,6 +36,13 @@ COLOUR_SUCCESS = 0x00FF00
 COLOUR_FAILURE = 0xFF0000
 COLOUR_DEFAULT = 0x7289da
 
+ALEX = 225678449790943242
+ALEXMAC = "00:d8:61:14:48:d3"
+SIZZLE = 140129710268088330
+SIZZLEMAC = "2c:f0:5d:24:ac:02"
+BOTHANDLER = 777947935698583562
+BOTUSER = 789912991159418937
+
 intents = discord.Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix='.', intents=intents)
@@ -51,9 +58,9 @@ async def on_ready():
     if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
-    if self_mac == "00:d8:61:14:48:d3": #alex
+    if self_mac == ALEXMAC: #alex
         botstatus = discord.Activity(type=discord.ActivityType.listening, name="no one")
-    elif self_mac == "2c:f0:5d:24:ac:02": #sizzle
+    elif self_mac == SIZZLEMAC: #sizzle
         botstatus = discord.Game("with souls")
     if bot.activity != botstatus:
         await bot.change_presence(status=discord.Status.online, activity=botstatus)
@@ -80,7 +87,7 @@ async def timer():
 
 
 @bot.command()
-@commands.has_role(777947935698583562)
+@commands.has_role(BOTHANDLER)
 async def mute(ctx, user):
     user = interpretUser(ctx, user)
     role = discord.utils.get(ctx.message.guild.roles, name="MUTED")
@@ -90,7 +97,7 @@ async def mute(ctx, user):
 
 
 @bot.command()
-@commands.has_role(777947935698583562)
+@commands.has_role(BOTHANDLER)
 async def unmute(ctx, user):
     user = interpretUser(ctx, user)
     role = discord.utils.get(ctx.message.guild.roles, name="MUTED")
@@ -100,7 +107,7 @@ async def unmute(ctx, user):
 
 
 @bot.command()
-@commands.has_role(777947935698583562)
+@commands.has_role(BOTHANDLER)
 async def check(ctx):
     file = await download("media.csv")
     with open("media.csv", "wb") as f:
@@ -194,13 +201,13 @@ async def hi(ctx, user=None):
 
 
 @bot.command()
-@commands.has_role(789912991159418937)
+@commands.has_role(BOTUSER)
 async def remind(ctx, user=None):
     # rewrote this a bit
     # user accepts nickname, username or UID
     # by default it's me, so normal .remind's work as usual - S.
     if user == None: #assignment has to be done manually to avoid a TypeError
-        user = 140129710268088330
+        user = SIZZLE
     user = interpretUser(ctx, user)
     logger.info("Reminding %s", user.name)
     await ctx.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
@@ -208,7 +215,7 @@ async def remind(ctx, user=None):
 
 
 @bot.command()
-@commands.has_role(789912991159418937)
+@commands.has_role(BOTUSER)
 async def save(ctx, id, media=None):
     if media is None:
         if len(ctx.message.attachments) > 0:
@@ -228,7 +235,7 @@ async def save(ctx, id, media=None):
 
 
 @bot.command()
-@commands.has_role(789912991159418937)
+@commands.has_role(BOTUSER)
 async def delete(ctx, id):
     lines = []
     file = await download("media.csv")
@@ -280,8 +287,8 @@ async def list(ctx):
 
 
 @bot.command()
-@commands.has_role(789912991159418937)
-async def bday(ctx, user=140129710268088330):
+@commands.has_role(BOTUSER)
+async def bday(ctx, user=SIZZLE):
     # same ol' thingamajig here; now accepts user as an argument
     user = interpretUser(ctx, user)
     for server in bot.guilds:
@@ -294,14 +301,14 @@ async def bday(ctx, user=140129710268088330):
 
 
 @bot.command()
-@commands.has_role(789912991159418937)
+@commands.has_role(BOTUSER)
 async def clear(ctx, number=1):
     number = int(number)
     await ctx.channel.purge(limit=number + 1)
 
 
 @bot.command()
-@commands.has_role(789912991159418937)
+@commands.has_role(BOTUSER)
 async def disco(ctx):
     await bot.wait_until_ready()
     currentTime = time.perf_counter()
@@ -321,11 +328,11 @@ async def disco(ctx):
 
 
 @bot.command()
-@commands.has_role(789912991159418937)
+@commands.has_role(BOTUSER)
 async def spam(ctx, tag, *args):
     if tag.isnumeric():
         print("Tag")
-        if tag == "225678449790943242" or tag == "140129710268088330":  # cheers <3 - S.
+        if tag == str(ALEX) or tag == str(SIZZLE):  # cheers <3 - S.
             await ctx.send("I'm not that stupid!")
         else:
             for i in range(20):
@@ -678,7 +685,7 @@ async def replywithembed(content="I'm supposed to send an empty message? Odd.", 
     if ctx == "":
         await reporterror(100)
         return
-    e = discord.Embed(title="INTBOT", description=content, colour=colour)
+    e = discord.Embed(title="THRESH", description=content, colour=colour)
     await ctx.send(embed=e)
 
 
@@ -727,20 +734,67 @@ async def help(ctx, cmdname=""):
 
     return
 
+# --------------------------------------------------#
+# --------------------------------------------------#
+# --------------------------------------------------#
+# ---------------------vvvvvvv----------------------#
+# -------------------->closure<---------------------#
+# ---------------------^^^^^^^----------------------#
+# --------------------------------------------------#
+# --------------------------------------------------#
+# --------------------------------------------------#
+
+def asyncwrapper(wrapped, pre = "", post = ""):
+	#this allows us to run async function before and/or after target async function, when that target is called
+	#I'm using it to assign more functionality to bot.close(), the code of which is normally inaccessible
+
+	#WARNING: the async wrapper can only wrap async functions and only ones with no arguments!
+	#It will ignore synchronous functions and it does not take arguments because I mean, 
+	#who knows how many are supposed to be expected
+
+	#of course with this implementations, errors in the wrapped stuff are silenced. Too bad!
+
+	async def run():
+		try:
+			await pre
+		except:
+			pass
+		try:
+			await wrapped
+		except:
+			pass
+		try:
+			await post
+		except:
+			pass
+
+	return run
+
+# --------------------------------------------------#
+# --------------------------------------------------#
+#make bot.close() first set the status to offline (except we can't do that, but we can do invisible
+#and functionally it's good for what we need)
+
+#we could call it every time obviously, but it seems more usable for the future to just integrate it
+bot.close = asyncwrapper(bot.close(), bot.change_presence(status=discord.Status.invisible))
+
+# --------------------------------------------------#
+# --------------------------------------------------#
 
 @bot.command()
 async def terminate(ctx):
-    if ctx.message.author.id == 225678449790943242 or ctx.message.author.id == 140129710268088330:  # cheers <3 -S.
+    if ctx.message.author.id == ALEX or ctx.message.author.id == SIZZLE:  # cheers <3 -S.
         await replywithembed("Bot Terminating", ctx)
         await bot.close()
     else:
         await replywithembed("Yea, almost got me.", ctx)
 
-
 @bot.command()
-@commands.has_role(777947935698583562)
-async def force(ctx):
-    await terminate(ctx)
+@commands.has_role(BOTHANDLER)
+async def restart(ctx):
+    await replywithembed("Bot Restarting", ctx)
+    await bot.close()
+    os.startfile("startup.py") #launch statusbot before closing
 
 # --------------------------------------------------#
 # --------------------------------------------------#
