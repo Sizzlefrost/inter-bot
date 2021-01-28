@@ -7,7 +7,7 @@ import logging
 import logging.config
 import logging.handlers
 import getmac
-import atexit
+import win32api
 
 logging.config.fileConfig('logging.conf')
 
@@ -71,6 +71,15 @@ async def restart(ctx):
     if (ctx.message.author.id == 140129710268088330 and getmac.get_mac_address() != "2c:f0:5d:24:ac:02"):
         logger.info("Sizzle requested a restart, this instance is Alex-side, so we wait")
         bot.veto = True
+
+def handle_exit(signal_type): #must accept a signal for Windows; 0 = CTRL-C, 1 = CTRL-BREAK, 2 = CLOSE, 5 = LOGOFF, 6 = SHUTDOWN
+    async def do_exit():
+        await bot.change_presence(status=discord.Status.invisible)
+        await bot.close()
+
+    asyncio.run(do_exit())
+
+win32api.SetConsoleCtrlHandler(handle_exit, True)
 
 bot.loop.create_task(run())
 bot.run('Nzc3ODA0OTc4MzY1OTIzMzU4.X7IxVQ.09pKfYFM9qnLAI9jUukI0hwOHbg')

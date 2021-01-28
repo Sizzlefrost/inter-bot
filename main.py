@@ -11,6 +11,7 @@ import logging.config #even more buff printf stuff: take config from a file and 
 import logging.handlers
 import json #duh. Handles JSONs.
 import getmac #unique device identification
+import win32api #windows-specific way of detecting exit events, because apparently windows blows dick at cross compatibility
 
 from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
@@ -795,6 +796,17 @@ async def restart(ctx):
     await replywithembed("Bot Restarting", ctx)
     await bot.close()
     os.startfile("startup.py") #launch statusbot before closing
+
+# --------------------------------------------------#
+# --------------------------------------------------#
+
+def handle_exit(signal_type): #must accept a signal for Windows; 0 = CTRL-C, 1 = CTRL-BREAK, 2 = CLOSE, 5 = LOGOFF, 6 = SHUTDOWN
+	async def do_exit():
+		await bot.close()
+
+	asyncio.run(do_exit())
+
+win32api.SetConsoleCtrlHandler(handle_exit, True)
 
 # --------------------------------------------------#
 # --------------------------------------------------#
