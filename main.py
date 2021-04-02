@@ -52,7 +52,40 @@ pfp = fp.read()
 
 self_mac = getmac.get_mac_address()
 
+currentAuthor = ""
+currentChannel = 0
+
 os.system("title Thresh (intbot)")
+
+
+@bot.event
+async def on_message(message):
+    role = discord.utils.find(lambda r: r.name == 'Mirror', message.guild.roles)
+    if (role in bot.get_guild(713343823962701897).get_member(message.author.id).roles or (message.channel.id == 827166243035021362 and message.author.id != 785566806509223939)) and len(message.attachments) == 0:
+        if "@" in message.content:
+            newMsg = message.content
+        else:
+            msg = message.content
+            newMsg = []
+            for i in range(len(msg)):
+                newMsg.append(msg[-i - 1])
+            newMsg = "".join(newMsg)
+        channel = message.channel
+        await channel.purge(limit=1)
+        global currentAuthor
+        global currentChannel
+        if message.author != currentAuthor or message.channel.id != currentChannel:
+            id = message.author.id
+            name = bot.get_guild(713343823962701897).get_member(id)
+            if name:
+                await channel.send("__**"+name.nick+"**__")
+            else:
+                await channel.send("__**"+message.author.name+"**__")
+            currentAuthor = message.author
+            currentChannel = message.channel.id
+        await channel.send(newMsg)
+    await bot.process_commands(message)
+
 
 @bot.event
 async def on_ready():
@@ -60,12 +93,13 @@ async def on_ready():
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
     if self_mac == ALEXMAC: #alex
-        botstatus = discord.Activity(type=discord.ActivityType.listening, name="no one")
+        botstatus = discord.Activity(type=discord.ActivityType.listening, name="enoyreve")
     elif self_mac == SIZZLEMAC: #sizzle
         botstatus = discord.Game("with souls")
     if bot.activity != botstatus:
         await bot.change_presence(status=discord.Status.online, activity=botstatus)
-    logger.info('{0.user} running it down.'.format(bot))
+    logger.info('Thresh is ready to lantern')
+
 
 async def timer():
     await bot.wait_until_ready()
@@ -85,6 +119,20 @@ async def timer():
             msg_sent = False
             refresh = False
             await asyncio.sleep(1)
+
+
+@bot.command()
+async def flip(ctx, *args):
+    if not args:
+        messages = await ctx.channel.history(limit=2).flatten()
+        msg = messages[-1].content
+    else:
+        msg = " ".join(args)
+    newMsg = []
+    for i in range(len(msg)):
+        newMsg.append(msg[-i - 1])
+    newMsg = "".join(newMsg)
+    await ctx.send(newMsg)
 
 
 @bot.command()
