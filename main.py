@@ -60,8 +60,10 @@ os.system("title Thresh (intbot)")
 
 @bot.event
 async def on_message(message):
-    role = discord.utils.find(lambda r: r.name == 'Mirror', message.guild.roles)
-    if (role in bot.get_guild(713343823962701897).get_member(message.author.id).roles or (message.channel.id == 827166243035021362 and message.author.id != 785566806509223939)) and len(message.attachments) == 0:
+    role = discord.utils.find(lambda r: r.name == 'Nice People', message.guild.roles)
+    if message.author.id == 225678449790943242 and role in bot.get_guild(713343823962701897).get_member(message.author.id).roles:
+        await message.channel.send("Nice try annoying the Boss")
+    elif (role in bot.get_guild(713343823962701897).get_member(message.author.id).roles or (message.channel.id == 827166243035021362 and message.author.id != 785566806509223939)) and len(message.attachments) == 0:
         if "@" in message.content:
             newMsg = message.content
         else:
@@ -77,13 +79,15 @@ async def on_message(message):
         if message.author != currentAuthor or message.channel.id != currentChannel:
             id = message.author.id
             name = bot.get_guild(713343823962701897).get_member(id)
-            if name:
-                await channel.send("__**"+name.nick+"**__")
-            else:
-                await channel.send("__**"+message.author.name+"**__")
+            #if type(name.nick) is str:
+                #await channel.send("__**"+name.nick+"**__")
+            #else:
+                #await channel.send("__**"+message.author.name+"**__")
             currentAuthor = message.author
             currentChannel = message.channel.id
-        await channel.send(newMsg)
+        #await channel.send(newMsg)
+        await channel.send("The Joke's On YOU!!")
+        await channel.send("https://static.wikia.nocookie.net/leagueoflegends/images/3/31/Shaco_OriginalCircle.png/revision/latest/smart/width/250/height/250?cb=20171112102952")
     await bot.process_commands(message)
 
 
@@ -317,6 +321,11 @@ async def gimme(ctx, id):
                 media = row[1]
         await ctx.send(media)
     os.remove("media.csv")
+
+
+@bot.command()
+async def raman(ctx):
+    await replywithembed("Cum in my mouth!", ctx)
 
 
 @bot.command()
