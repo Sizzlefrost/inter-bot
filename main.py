@@ -959,4 +959,4 @@ def interpretUser(ctx, value=None):
 # --------------------------------------------------#
 
 bot.loop.create_task(timer())
-bot.run('Nzg1NTY2ODA2NTA5MjIzOTM5.X85uGQ.dg3IzPDlcM4oCFfeWCOFWUcMt9U')
+bot.run('Nzg1NTY2ODA2NTA5MjIzOTM5.X85uGQ.d_AEvH1RtYj4IO6Wad_S8WGyYvw')
