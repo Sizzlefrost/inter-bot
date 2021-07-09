@@ -396,20 +396,8 @@ async def spam(ctx, tag, *args):
             for i in range(20):
                 await ctx.send(f"<@{tag}>")
     elif tag[0] == ".":
-        print("Media")
-        file = await download("media.csv")
-        with open("media.csv", "wb") as f:
-            f.write(file.read())
-            f.close()
-        with open("media.csv", "r+", newline="") as csvfile:
-            reader = csv.reader(csvfile, delimiter=",", quotechar="|")
-            media = " "
-            print(args[0])
-            for row in reader:
-                if row[0] == args[0]:
-                    media = row[1]
-            for i in range(10):
-                await ctx.send(media + " " + " ".join(args[1:]))
+        for i in range(10):
+            await globals()[tag[1:]](ctx, *args)
     else:
         print("String")
         for i in range(10):
