@@ -1,3 +1,4 @@
 *.json
 !backups/*
 *.txt
+token.csv

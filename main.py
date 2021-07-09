@@ -954,9 +954,18 @@ def interpretUser(ctx, value=None):
         logger.info("User interpretation failed, supplied value is of the wrong type")
         return
 
+# --------------------------------------------------#
+# --------------------------------------------------#
+
+def getBotToken():
+    with open("token.csv", "r") as f:
+        token = f.read()
+        logger.info("Token verified: " + str(token))
+        f.close()
+        return str(token)
 
 # --------------------------------------------------#
 # --------------------------------------------------#
 
-bot.loop.create_task(timer())
-bot.run('Nzg1NTY2ODA2NTA5MjIzOTM5.X85uGQ.d_AEvH1RtYj4IO6Wad_S8WGyYvw')
+bot.loop.create_task(timer()) 
+bot.run(getBotToken())
