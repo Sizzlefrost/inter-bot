@@ -362,7 +362,10 @@ async def bday(ctx, user=SIZZLE):
 @commands.has_role(BOTUSER)
 async def clear(ctx, number=1):
     number = int(number)
-    await ctx.channel.purge(limit=number + 1)
+    if 25 >= number > 0:
+        await ctx.channel.purge(limit=number + 1)
+    else:
+        await replywithembed("Not a valid clear number", ctx)
 
 
 @bot.command()
