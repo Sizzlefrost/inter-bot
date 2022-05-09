@@ -12,6 +12,7 @@ import logging.handlers
 import json #duh. Handles JSONs.
 import getmac #unique device identification
 import win32api #windows-specific way of detecting exit events, because apparently windows blows dick at cross compatibility
+import requests #HTTP requests to interact with Riot API
 
 from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
@@ -22,11 +23,11 @@ import os #duh. Operating System operations (deleting files, joining paths)
 import shutil #advanced operating system operations (copying files)
 from tempfile import NamedTemporaryFile
 
-gauth = GoogleAuth()
+"""gauth = GoogleAuth()
 gauth.LoadClientConfigSettings()
 gauth.LocalWebserverAuth()
 drive = GoogleDrive(gauth)
-service = build('drive', 'v3', credentials=gauth.credentials)
+service = build('drive', 'v3', credentials=gauth.credentials)"""
 
 logging.config.fileConfig('logging.conf')
 sizzler = logging.getLogger("intbot.bot.sizzle")
@@ -504,6 +505,94 @@ async def kill(ctx):
 # --------------------------------------------------#
 # --------------------------------------------------#
 # --------------------------------------------------#
+
+# -- CLASH block -- #
+
+API_key = "RGAPI-73c04ef6-e99f-49a9-bf06-993399b91063"
+
+@bot.command()
+@commands.has_role(BOTHANDLER)
+async def updateAPIKey(ctx, key):
+    # temporary command
+    # during development, Riot API keys are only supplied for 24 hours on a manual refresh
+    # this command "primes" a generated key for use in the bot
+    global API_key
+    API_key = key
+    await replywithembed("API key updated!", ctx)
+
+async def request(ctx, endpt, api_key):
+    res = requests.get(endpt+"?api_key="+str(api_key))
+    if res.ok:
+        return res.json(), res.status_code
+    else:
+        return False, res.status_code
+
+@bot.command()
+async def getClashTeam(ctx, playername=""):
+    global API_key
+
+    # step 1 - get one of our own accounts, an "anchor" through which we can find our team
+
+    # try a couple usernames, I guess
+    # in order of likelihood
+    usernames = [ "Alex664410690", "TreePredator", "Sand%20Baggins", "Rambos1234", "Ch0s3N121", "Nick6756", "RosalindwKzPsR", "J3LLYF1SH", "Grizziebeth", "kevxlue", "Yuumi%202%20good"]
+    if playername != "":
+        playername = playername.strip('"')
+        usernames = []
+        usernames.append(playername)
+    for handle in usernames:
+        response, errorcode = await request(
+            ctx,
+            "https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-name/"+handle,
+            API_key)
+        if response == False:
+            if errorcode == 403:
+                replywithembed("Invalid API key! Use .updateAPIKey to provide a valid one.", ctx)
+                return
+            # ... perhaps other errors can be treated here as well
+        else:
+            anchor_name = handle
+            anchor_id = response["id"]
+            # now fetch that guy in the clash API (if they're in a team)
+            response, errorcode = await request(
+                ctx,
+                "https://euw1.api.riotgames.com/lol/clash/v1/players/by-summoner/"+anchor_id,
+                API_key)
+            if response == False:
+                # ... possibly handle these somehow again
+                pass
+            elif response == []: # player is not registered for clash
+                team_id = ""
+                pass
+            else:
+                logger.info(str(response))
+                team_id = response[0]["teamId"] # maybe has to be response[1], because it's a list
+                break
+
+    # if there is no team ID, then there is no team I guess lol
+    if playername != "" and team_id == "":
+        return await replywithembed(playername+" is not in a clash team!", ctx)
+    elif team_id == "":
+        return await replywithembed("No Divern clash team was found!", ctx)
+
+    # step 2 - fetch the team
+    response, errorcode = await request(
+        ctx,
+        "https://euw1.api.riotgames.com/lol/clash/v1/teams/"+team_id,
+        API_key)
+    if response == False:
+        # ... handle these somehow again
+        pass
+    else:
+        # OK -- team found
+        team = response
+        # team.name, team.abbreviation, team.tier available here
+        # team.players - list of [summonerId, position (role/lane), role (captain/member)]
+
+    await replywithembed(str(team["name"])+" found!", ctx)
+
+# -- end of CLASH -- #
+
 @bot.command()
 async def confidence(ctx, champ="None", level="None", role=""):
     # confidence <champ> <level> <role>
