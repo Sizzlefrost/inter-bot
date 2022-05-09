@@ -13,6 +13,8 @@ import json #duh. Handles JSONs.
 import getmac #unique device identification
 import win32api #windows-specific way of detecting exit events, because apparently windows blows dick at cross compatibility
 import requests #HTTP requests to interact with Riot API
+import subprocess #for interactions with command line
+import base64 #encoding of password to communicate with league client
 
 from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
@@ -520,32 +522,32 @@ async def updateAPIKey(ctx, key):
     API_key = key
     await replywithembed("API key updated!", ctx)
 
-async def request(ctx, endpt, api_key):
-    res = requests.get(endpt+"?api_key="+str(api_key))
+async def requestRiot(ctx, endpt, api_key):
+    res = requests.get("https://euw1.api.riotgames.com/"+endpt+"?api_key="+str(api_key))
     if res.ok:
         return res.json(), res.status_code
     else:
         return False, res.status_code
 
 @bot.command()
-async def getClashTeam(ctx, playername=""):
+async def getClashTeamByPlayer(ctx, playername=""):
     global API_key
 
     # step 1 - get one of our own accounts, an "anchor" through which we can find our team
 
     # try a couple usernames, I guess
     # in order of likelihood
-    usernames = [ "Alex664410690", "TreePredator", "Sand%20Baggins", "Rambos1234", "Ch0s3N121", "Nick6756", "RosalindwKzPsR", "J3LLYF1SH", "Grizziebeth", "kevxlue", "Yuumi%202%20good"]
+    usernames = ["Alex664410690", "TreePredator", "Sand%20Baggins", "Rambos1234", "Ch0s3N121", "kevxlue", "Yuumi%202%20good", "Nick6756", "RosalindwKzPsR", "J3LLYF1SH", "Grizziebeth"]
     if playername != "":
         playername = playername.strip('"')
         usernames = []
         usernames.append(playername)
     for handle in usernames:
-        response, errorcode = await request(
+        response, errorcode = await requestRiot(
             ctx,
-            "https://euw1.api.riotgames.com/lol/summoner/v4/summoners/by-name/"+handle,
+            "lol/summoner/v4/summoners/by-name/"+handle,
             API_key)
-        if response == False:
+        if not response:
             if errorcode == 403:
                 replywithembed("Invalid API key! Use .updateAPIKey to provide a valid one.", ctx)
                 return
@@ -554,9 +556,9 @@ async def getClashTeam(ctx, playername=""):
             anchor_name = handle
             anchor_id = response["id"]
             # now fetch that guy in the clash API (if they're in a team)
-            response, errorcode = await request(
+            response, errorcode = await requestRiot(
                 ctx,
-                "https://euw1.api.riotgames.com/lol/clash/v1/players/by-summoner/"+anchor_id,
+                "lol/clash/v1/players/by-summoner/"+anchor_id,
                 API_key)
             if response == False:
                 # ... possibly handle these somehow again
@@ -576,9 +578,9 @@ async def getClashTeam(ctx, playername=""):
         return await replywithembed("No Divern clash team was found!", ctx)
 
     # step 2 - fetch the team
-    response, errorcode = await request(
+    response, errorcode = await requestRiot(
         ctx,
-        "https://euw1.api.riotgames.com/lol/clash/v1/teams/"+team_id,
+        "lol/clash/v1/teams/"+team_id,
         API_key)
     if response == False:
         # ... handle these somehow again
@@ -591,7 +593,36 @@ async def getClashTeam(ctx, playername=""):
 
     await replywithembed(str(team["name"])+" found!", ctx)
 
-# -- end of CLASH -- #
+async def requestClient(endpt):
+    # windows specific, https://stackoverflow.com/questions/4760215/running-shell-command-and-capturing-the-output
+    shell = str(subprocess.Popen(
+        "wmic PROCESS WHERE name='LeagueClientUx.exe' GET commandline", 
+        shell=True, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE).communicate()[0])
+    # amidst the shell output, we have to regex-filter out the useful stuff
+    port = re.search("(?<=--app-port\=)[0-9]{1,5}", shell).group()
+    password = re.search("(?<=--remoting-auth-token\=)\w*", shell).group() #K2K27vvHVodOUEvW8J8Ohw
+    url = f"https://127.0.0.1:{port}/{endpt}"
+    return requests.get(url, auth=requests.auth.HTTPBasicAuth("riot", password), verify=False).json()
+
+@bot.command()
+async def getClashTeam(ctx):
+    #summary = await requestClient("lol-clash/v1/tournament-summary")
+    #bracketId = summary[0]["bracketId"]
+    #bracket = await requestClient(f"lol-clash/v1/bracket/{bracketId
+    #rosterId = bracket[0]["rosterId"]
+    rosterId = "130b4a9a-e2e4-4aa4-9cbb-454601d66b55"
+    roster = await requestClient(f"lol-clash/v1/roster/{rosterId}")
+    summonerId = roster["captainSummonerId"]
+    await ctx.send(summonerId)
+    "/lol/summoner/v4/summoners/{encryptedSummonerId}"
+
+
+@bot.command()
+async def getClashTiers(ctx):
+    data = await requestClient("lol-clash/v1/tournament/get-all-player-tiers")
+    await replywithembed(str(data), ctx)
 
 @bot.command()
 async def confidence(ctx, champ="None", level="None", role=""):
