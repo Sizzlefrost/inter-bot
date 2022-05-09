@@ -20,6 +20,7 @@ from googleapiclient.http import MediaIoBaseDownload
 import io #duh. Input/Output.
 import os #duh. Operating System operations (deleting files, joining paths)
 import shutil #advanced operating system operations (copying files)
+from tempfile import NamedTemporaryFile
 
 gauth = GoogleAuth()
 gauth.LoadClientConfigSettings()
@@ -56,6 +57,8 @@ currentAuthor = ""
 currentChannel = 0
 
 os.system("title Thresh (intbot)")
+
+killBool = False
 
 
 @bot.event
@@ -325,7 +328,7 @@ async def gimme(ctx, id):
 
 @bot.command()
 async def raman(ctx):
-    await replywithembed("Cum in my mouth!", ctx)
+    await replywithembed("Congrats on Imperial! <@305035084468191232>", ctx)
 
 
 @bot.command()
@@ -391,20 +394,105 @@ async def disco(ctx):
 @bot.command()
 @commands.has_role(BOTUSER)
 async def spam(ctx, tag, *args):
-    if tag.isnumeric():
+    if not killBool:
         print("Tag")
-        if tag == str(ALEX) or tag == str(SIZZLE):  # cheers <3 - S.
-            await ctx.send("I'm not that stupid!")
+        found = ""
+        for i in args:
+            if str(ALEX) in i:
+                found = ALEX
+            elif str(SIZZLE) in i:
+                found = SIZZLE
+        if str(ALEX) in tag:
+            found = ALEX
+            await replywithembed(f"Hahaha! I wouldn't let you ping <@{found}>!", ctx)
+            await asyncio.sleep(2)
+            await replywithembed(f"Oh wait...", ctx)
+        elif str(SIZZLE) in tag :
+            found = SIZZLE
+            await replywithembed(f"Hahaha! I wouldn't let you ping <@{found}>!", ctx)
+            await asyncio.sleep(2)
+            await replywithembed(f"Oh wait...", ctx)
+        elif found:
+            await replywithembed(f"Hahaha! I wouldn't let you ping <@{found}>!", ctx)
+            await asyncio.sleep(2)
+            await replywithembed(f"Oh wait...", ctx)
+        elif tag[0] == ".":
+            for i in range(10):
+                await globals()[tag[1:]](ctx, *args)
         else:
-            for i in range(20):
-                await ctx.send(f"<@{tag}>")
-    elif tag[0] == ".":
-        for i in range(10):
-            await globals()[tag[1:]](ctx, *args)
-    else:
-        print("String")
-        for i in range(10):
-            await ctx.send(tag + " " + " ".join(args))
+            print("String")
+            for i in range(10):
+                await ctx.send(tag + " " + " ".join(args))
+
+
+@bot.command()
+async def ssjoin(ctx):
+    with open("secretsanta.csv", "r", newline="") as file:
+        reader = csv.reader(file, delimiter=",", quotechar="|")
+        for row in reader:
+            if row[0] == str(ctx.message.author.id):
+                await replywithembed("Cannot join twice!", ctx)
+                return
+    with open("secretsanta.csv", "a+", newline="") as file:
+        writer = csv.writer(file, delimiter=",", quotechar="|", quoting=csv.QUOTE_MINIMAL)
+        writer.writerow([ctx.message.author.id])
+        await replywithembed("Joined the Secret Santa!", ctx)
+
+
+@bot.command()
+async def sswishlist(ctx, *args):
+    tempfile = NamedTemporaryFile('w+t', newline='', delete=False)
+    with open("secretsanta.csv", "r", newline="") as file, tempfile:
+        reader = csv.reader(file, delimiter=",", quotechar="|")
+        writer = csv.writer(tempfile, delimiter=",", quotechar="|")
+        for row in reader:
+            if row[0] == str(ctx.message.author.id):
+                x = " ".join(args)
+                if len(row) > 1:
+                    row[1] = x
+                else:
+                    row.append(x)
+                await replywithembed(f"Your wishlist is now: {x}", ctx)
+            writer.writerow(row)
+    shutil.move(tempfile.name, "secretsanta.csv")
+
+
+@bot.command()
+@commands.has_role(BOTHANDLER)
+async def ssgo(ctx):
+    with open("secretsanta.csv", "r", newline="") as file:
+        reader = csv.reader(file, delimiter=",", quotechar="|")
+        ids = []
+        for row in reader:
+            ids.append(row[0])
+    x = random.randint(1, len(ids) - 1)
+    for i in range(x):
+        ids.append(ids.pop(0))
+    pos = 0
+    with open("secretsanta.csv", "r", newline="") as file:
+        reader = csv.reader(file, delimiter=",", quotechar="|")
+        for row in reader:
+            print("here")
+            id = ids[pos]
+            pos += 1
+            for member in bot.get_all_members():
+                if member.id == int(id):
+                    print(id)
+                    await member.send(f"Secret Santa: {bot.get_user(int(row[0])).name}")
+                    if len(row) > 1:
+                        await member.send(f"Their wishlist: {row[1]}")
+                    else:
+                        await member.send(f"This person did not specify a wishlist")
+
+
+@bot.command()
+@commands.has_role(BOTHANDLER)
+async def kill(ctx):
+    global killBool
+    killBool = True
+    await asyncio.sleep(10)
+    killBool = False
+
 
 
 # --------------------------------------------------#
