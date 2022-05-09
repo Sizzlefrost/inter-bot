@@ -63,7 +63,6 @@ os.system("title Thresh (intbot)")
 
 killBool = False
 
-
 @bot.event
 async def on_message(message):
     role = discord.utils.find(lambda r: r.name == 'Nice People', message.guild.roles)
@@ -410,7 +409,7 @@ async def spam(ctx, tag, *args):
             await replywithembed(f"Hahaha! I wouldn't let you ping <@{found}>!", ctx)
             await asyncio.sleep(2)
             await replywithembed(f"Oh wait...", ctx)
-        elif str(SIZZLE) in tag :
+        elif str(SIZZLE) in tag:
             found = SIZZLE
             await replywithembed(f"Hahaha! I wouldn't let you ping <@{found}>!", ctx)
             await asyncio.sleep(2)
@@ -608,21 +607,203 @@ async def requestClient(endpt):
 
 @bot.command()
 async def getClashTeam(ctx):
-    #summary = await requestClient("lol-clash/v1/tournament-summary")
-    #bracketId = summary[0]["bracketId"]
-    #bracket = await requestClient(f"lol-clash/v1/bracket/{bracketId
-    #rosterId = bracket[0]["rosterId"]
-    rosterId = "130b4a9a-e2e4-4aa4-9cbb-454601d66b55"
-    roster = await requestClient(f"lol-clash/v1/roster/{rosterId}")
-    summonerId = roster["captainSummonerId"]
-    await ctx.send(summonerId)
-    "/lol/summoner/v4/summoners/{encryptedSummonerId}"
+    summary = await requestClient("lol-clash/v1/tournament-summary")
+    bracketId = summary[0]["bracketId"]
+    bracket = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
+    await ctx.send(str(bracket))
+    rosters = bracket["rosters"]
+    for rosterId in rosters:
+        #rosterId = "130b4a9a-e2e4-4aa4-9cbb-454601d66b55"
+        roster = await requestClient(f"lol-clash/v1/roster/{rosterId}")
+        summonerId = roster["captainSummonerId"]
+        player = await requestClient(f"lol-hovercard/v1/friend-info-by-summoner/{summonerId}")
+        name = player["name"]
+        await getBans(ctx, await getClashTeamByPlayer(ctx, name))
+
+async def getPlayerChampList(ctx, sumid, match_count):
+    champ_dict = {}
+
+    response, errorcode = await requestRiot(
+        ctx,
+        "lol/summoner/v4/summoners/" + sumid,
+        API_key)
+    if not response:
+        pass
+    else:
+        puuid = response.json()["puuid"]
+
+    global API_key
+    response, errorcode = await requestRiot(
+        ctx,
+        "lol/match/v5/matches/by-puuid/" + puuid + "/ids?start=0&count="+match_count,
+        API_key)
+    if not response:
+        pass
+    else:
+        match_list = response.json()
+        for match in match_list:
+            response, errorcode = await requestRiot(
+                ctx,
+                "lol/match/v5/matches/" + match,
+                API_key)
+            if not response:
+                pass
+            else:
+                match_data = response.json()
+                i = 1
+                for player in match_data["metadata"]["participants"]:
+                    if player == puuid:
+                        break
+                    else:
+                        i += 1
+                champion = match_data["info"]["participants"][i]["championName"]
+                # possibly collect other data here - gold, xp, kda, etc
+                if champ_dict[champion].isnumeric():
+                    champ_dict[champion] += 1
+                else:
+                    champ_dict[champion] = 1
+    return champ_dict
 
 
-@bot.command()
-async def getClashTiers(ctx):
-    data = await requestClient("lol-clash/v1/tournament/get-all-player-tiers")
-    await replywithembed(str(data), ctx)
+globalChampionDict = {"Ahri": 3,
+                      "Akali": 7,
+                      "Anivia": 5,
+                      "Aurelion Sol": 1,
+                      "Azir": 3,
+                      "Cassiopeia": 6,
+                      "Corki": 5,
+                      "Fizz":7,
+                      "Galio": 3,
+                      "Heimer": 4,
+                      "Irelia": 8,
+                      "Kassadin": 5,
+                      "Katarina": 7,
+                      "LeBlanc": 6,
+                      "Lissandra": 4,
+                      "Malzahar": 3,
+                      "Orianna": 6,
+                      "Qiyana": 4,
+                      "Ryze": 1,
+                      "Sylas": 3,
+                      "Syndra": 6,
+                      "Veigar": 6,
+                      "Vel'koz": 6,
+                      "Viktor": 4,
+                      "Vladimir": 3,
+                      "Xerath": 3,
+                      "Yasuo": 7,
+                      "Yone": 7,
+                      "Zed": 8,
+                      "Zoe": 4,
+                      "Aphelios": 6,
+                      "Ashe": 2,
+                      "Caitlyn": 2,
+                      "Draven": 7,
+                      "Ezreal": 3,
+                      "Jhin": 2,
+                      "Jinx": 3,
+                      "Kai’Sa": 7,
+                      "Kalista": 5,
+                      "Kog’Maw": 6,
+                      "Lucian": 4,
+                      "Miss Fortune": 8,
+                      "Samira": 9,
+                      "Senna": 7,
+                      "Sivir": 4,
+                      "Tristana": 10,
+                      "Twitch": 7,
+                      "Varus": 2,
+                      "Vayne": 6,
+                      "Xayah": 8,
+                      "Amumu": 2,
+                      "Diana": 4,
+                      "Ekko": 5,
+                      "Elise": 6,
+                      "Evelynn": 8,
+                      "Fiddlesticks": 7,
+                      "Graves": 3,
+                      "Hecarim": 6,
+                      "Ivern": 1,
+                      "Jarvan IV": 3,
+                      "Karthus": 5,
+                      "Kayn": 8,
+                      "Kha'Zix": 10,
+                      "Kindred": 4,
+                      "Lee Sin": 6,
+                      "Lillia": 2,
+                      "Master Yi": 4,
+                      "Nidalee": 3,
+                      "Nocturne": 9,
+                      "Nunu & Willump": 1,
+                      "Olaf": 4,
+                      "Poppy": 6,
+                      "Rammus": 4,
+                      "Rek'Sai": 5,
+                      "Rengar": 8,
+                      "Sejuani": 2,
+                      "Shaco": 9,
+                      "Shyvana": 7,
+                      "Skarner": 4,
+                      "Taliyah": 4,
+                      "Talon": 6,
+                      "Trundle": 7,
+                      "Udyr": 3,
+                      "Vi": 9,
+                      "Viego": 8,
+                      "Volibear": 5,
+                      "Warwick": 6,
+                      "Wukong": 7,
+                      "Xin Zhao": 6,
+                      "Zac": 3,
+}
+
+async def getBans(ctx, sumIdList):
+    global globalChampionDict
+    banWeights = {}
+    for sumId in sumIdList:
+        champDict = await getPlayerChampList(ctx, sumId, 50)
+        for championName, championGamesPlayedValue in champDict:
+            if globalChampionDict[championName]:
+                if banWeights[championName]:
+                    banWeights[championName] += globalChampionDict[championName] * championGamesPlayedValue
+                else:
+                    banWeights[championName] = globalChampionDict[championName] * championGamesPlayedValue
+            else:
+                if banWeights[championName]:
+                    banWeights[championName] += globalChampionDict[championName]
+                else:
+                    banWeights[championName] = globalChampionDict[championName]
+    channel = bot.get_channel(713356398490288158)
+    await channel.send(str(banWeights)) #Needs formatting -A
+
+
+#TODO LIST:
+# Remove ctxs because they seem to be useless and we don't even have one bc it's an automatic loop
+# Format output of getBans
+# Find out how riot refers to match "status" vs roster "state"
+# Siz and Adam need to fill in their lane's champs in globalChampionDict
+
+
+async def clashCheckLoop(ctx=713356398490288158):
+    previousStatus = ""
+    summary = await requestClient("lol-clash/v1/tournament-summary")
+    bracketId = summary[0]["bracketId"]
+    while True:
+        summary = await requestClient("lol-clash/v1/tournament-summary")
+        if summary[0]["state"] == "SCOUTING" and previousStatus != "SCOUTING":
+            bracket = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
+            for game in bracket["matches"]:
+                if game["rosterId1"] == summary[0]["rosterId"] and game["status"] == "SCOUTING": #LITERALLY WHO KNOWS HOW RIOT DISPLAYS THE MATCH STATUS VS ROSTER STATe, WE BURGER FLIPPIN BOIS
+                    rosterId = game["rosterId2"]
+                elif game["rosterId2"] == summary[0]["rosterId"] and game["status"] == "SCOUTING":
+                    rosterId = game["rosterId1"]
+            roster = await requestClient(f"lol-clash/v1/roster/{rosterId}")
+            summonerId = roster["captainSummonerId"]
+            player = await requestClient(f"lol-hovercard/v1/friend-info-by-summoner/{summonerId}")
+            name = player["name"]
+            await getBans(ctx, await getClashTeamByPlayer(ctx, name))
+        previousStatus = summary[0]["state"]
+        await asyncio.sleep(30)
 
 @bot.command()
 async def confidence(ctx, champ="None", level="None", role=""):
