@@ -509,21 +509,43 @@ async def kill(ctx):
 
 # -- CLASH block -- #
 
-
+# anti rate limiting: current second and number of requests since last second
+antiRL = [dt.datetime.now().second, 1]
 
 # Send a request to Riot API, signed with the Dev API Key
 # Params:
 #   endpt (str) - part of the URL to access, example "lol/summoner/v4/summoners/by-name/Sand%20Baggins"
+#   routing (str, optional) - server to forward the request to. Either shards (br, ru, euw1) or regions (europe, americas)
 # Outputs:
 #   res (json) or False - body of the response on success, False on error
 #   status_code (numeric) - 1xx INFO, 2xx OK, 3xx REDIRECT, 4xx INPUT ERROR, 5xx SERVER ERROR
-async def requestRiot(endpt):
+async def requestRiot(endpt, routing="euw1"):
+    RATE_LIMIT = 20
+    global antiRL
     API_key = "RGAPI-832d4de6-906c-4566-8f6a-744ed1f6c87c"
 
-    res = requests.get(f"https://euw1.api.riotgames.com/{endpt}?api_key={API_key}")
+    # before request, ensure we're not about to be rate limited
+    current = dt.datetime.now().second
+    if antiRL[0] != current: # every second, reset request counter
+        antiRL[1] = 1
+        antiRL[0] = current
+    if antiRL[1] >= RATE_LIMIT - 1: #if about to break rate limit, wait
+        logger.warning("About to exceed rate limits. Idling.")
+        while dt.datetime.now().second == antiRL[0]:
+            await asyncio.sleep(0.05)
+        logger.warning("Done idling.")
+
+    res = requests.get(f"https://{routing}.api.riotgames.com/{endpt}", headers={"X-Riot-Token": API_key})
+    antiRL[1] += 1
+
     if res.ok:
         return res.json(), res.status_code
     else:
+        if res.status_code == 429: # rate limiting protection
+            logger.error("Received a 429 RATE_LIMIT despite precautions. Terminating command.")
+            raise RuntimeError("Command terminated due to a rate limiting breach.")
+        else:
+            logger.warning(f"Recorded an HTTP error: {res.status_code} - { res.json()['status']['message'] }")
         return False, res.status_code
 
 # Send a request to LCU API (local instance of League Client)
@@ -554,7 +576,6 @@ async def requestClient(endpt):
 #   playername (str, optional) - League display name of target player. If not supplied, looks for our own clash team.
 # Output:
 #   summonerIds (list of str) - List of summoner IDs forming the target team. If player is not in a team, list returns empty.
-@bot.command()
 async def getClashTeamByPlayer(playername=""):
     # step 1 - get one of our own accounts, an "anchor" through which we can find our team
 
@@ -616,7 +637,6 @@ async def getClashTeamByPlayer(playername=""):
 #   none
 # Outputs:
 #   none
-@bot.command()
 async def getClashTeam():
     summary, error = await requestClient("lol-clash/v1/tournament-summary")
     bracketId = summary[0]["bracketId"]
@@ -641,26 +661,28 @@ async def getClashTeam():
 #       championName (str) - name of champion (as displayed, in client language)
 #       gamesPlayed (num) - number of games target summoner played on the champion
 async def getPlayerChampList(sumId, matchCount):
-    champ_dict = {}
-
+    champDict = {}
+    reqn = 1
     response, errorcode = await requestRiot(f"lol/summoner/v4/summoners/{sumId}")
     if not response:
         pass
     else:
-        puuid = response.json()["puuid"]
+        puuid = response["puuid"]
+        reqn += 1
 
-    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?start=0&count={matchCount}")
+    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?start=0&count={matchCount}", "europe")
     if not response:
         pass
     else:
-        matchList = response.json()
+        matchList = response
+        reqn += 1
         for match in matchList:
-            response, errorcode = await requestRiot(f"lol/match/v5/matches/{match}")
+            response, errorcode = await requestRiot(f"lol/match/v5/matches/{match}", "europe")
             if not response:
                 pass
             else:
-                matchData = response.json()
-                i = 1
+                matchData = response
+                i = 0
                 for player in matchData["metadata"]["participants"]:
                     if player == puuid:
                         break
@@ -668,266 +690,13 @@ async def getPlayerChampList(sumId, matchCount):
                         i += 1
                 champion = matchData["info"]["participants"][i]["championName"]
                 # possibly collect other data here - gold, xp, kda, etc
-                if champDict[champion].isnumeric():
+                if champion in champDict:
                     champDict[champion] += 1
                 else:
                     champDict[champion] = 1
+    if errorcode >= 400:
+        return f"HTTP error encountered during request #{reqn}: {errorcode}"
     return champDict
-
-# PULL THIS DATA FROM AN EXTERNAL FILE?
-globalChampionDict = {"Ahri": 3,
-                      "Akali": 7,
-                      "Anivia": 5,
-                      "Aurelion Sol": 1,
-                      "Azir": 3,
-                      "Cassiopeia": 6,
-                      "Corki": 5,
-                      "Fizz":7,
-                      "Galio": 3,
-                      "Heimer": 4,
-                      "Irelia": 8,
-                      "Kassadin": 5,
-                      "Katarina": 7,
-                      "LeBlanc": 6,
-                      "Lissandra": 4,
-                      "Malzahar": 3,
-                      "Orianna": 6,
-                      "Qiyana": 4,
-                      "Ryze": 1,
-                      "Sylas": 3,
-                      "Syndra": 6,
-                      "Veigar": 6,
-                      "Vel'koz": 6,
-                      "Viktor": 4,
-                      "Vladimir": 3,
-                      "Xerath": 3,
-                      "Yasuo": 7,
-                      "Yone": 7,
-                      "Zed": 8,
-                      "Zoe": 4,
-                      "Aphelios": 6,
-                      "Ashe": 2,
-                      "Caitlyn": 2,
-                      "Draven": 7,
-                      "Ezreal": 3,
-                      "Jhin": 2,
-                      "Jinx": 3,
-                      "Kai’Sa": 7,
-                      "Kalista": 5,
-                      "Kog’Maw": 6,
-                      "Lucian": 4,
-                      "Miss Fortune": 8,
-                      "Samira": 9,
-                      "Senna": 7,
-                      "Sivir": 4,
-                      "Tristana": 10,
-                      "Twitch": 7,
-                      "Varus": 2,
-                      "Vayne": 6,
-                      "Xayah": 8,
-                      "Amumu": 2,
-                      "Diana": 4,
-                      "Ekko": 5,
-                      "Elise": 6,
-                      "Evelynn": 8,
-                      "Fiddlesticks": 7,
-                      "Graves": 3,
-                      "Hecarim": 6,
-                      "Ivern": 1,
-                      "Jarvan IV": 3,
-                      "Karthus": 5,
-                      "Kayn": 8,
-                      "Kha'Zix": 10,
-                      "Kindred": 4,
-                      "Lee Sin": 6,
-                      "Lillia": 2,
-                      "Master Yi": 4,
-                      "Nidalee": 3,
-                      "Nocturne": 9,
-                      "Nunu & Willump": 1,
-                      "Olaf": 4,
-                      "Poppy": 6,
-                      "Rammus": 4,
-                      "Rek'Sai": 5,
-                      "Rengar": 8,
-                      "Sejuani": 2,
-                      "Shaco": 9,
-                      "Shyvana": 7,
-                      "Skarner": 4,
-                      "Taliyah": 4,
-                      "Talon": 6,
-                      "Trundle": 7,
-                      "Udyr": 3,
-                      "Vi": 9,
-                      "Viego": 8,
-                      "Volibear": 5,
-                      "Warwick": 6,
-                      "Wukong": 7,
-                      "Xin Zhao": 6,
-                      "Zac": 3,
-}
-
-"""
-  # sizzle
-  "Aatrox" : 2,
-  "Ahri" : 5,
-  "Akali" : 6,
-  "Akshan" : 6,
-  "Alistar" : 3,
-  "Amumu" : 5,
-  "Anivia" : 6,
-  "Annie" : 6,
-  "Aphelios" : 5,
-  "Ashe" : 4,
-  "Aurelion Sol" : 2,
-  "Azir" : 4,
-  "Bard" : 4,
-  "Blitzcrank" : 7,
-  "Brand" : 5,
-  "Braum" : 3,
-  "Caitlyn" : 5,
-  "Camille" : 5,
-  "Cassiopeia" : 3,
-  "Cho'Gath" : 5,
-  "Corki" : 5,
-  "Darius" : 6,
-  "Diana" : 6,
-  "Dr. Mundo" : 7,
-  "Draven" : 5,
-  "Ekko" : 6,
-  "Elise" : 5,
-  "Evelynn" : 6,
-  "Ezreal" : 6,
-  "Fiddlesticks" : 5,
-  "Fiora" : 6,
-  "Fizz" : 7,
-  "Galio" : 4,
-  "Gangplank" : 8,
-  "Garen" : 8,
-  "Gnar" : 5,
-  "Gragas" : 6,
-  "Graves" : 5,
-  "Gwen" : 8,
-  "Hecarim" : 6,
-  "Heimerdinger" : 4,
-  "Illaoi" : 7,
-  "Irelia" : 7,
-  "Ivern" : 4,
-  "Janna" : 3,
-  "Jarvan IV" : 6,
-  "Jax" : 6,
-  "Jayce" : 6,
-  "Jhin" : 5,
-  "Jinx" : 5,
-  "Kai'Sa" : 6,
-  "Kalista" : 2,
-  "Karma" : 6,
-  "Karthus" : 7,
-  "Kassadin" : 7,
-  "Katarina" : 7,
-  "Kayle" : 4,
-  "Kayn" : 7,
-  "Kennen" : 5,
-  "Kha'Zix" : 7,
-  "Kindred" : 2,
-  "Kled" : 3,
-  "Kog'Maw" : 5,
-  "Leblanc" : 6,
-  "Lee Sin" : 6,
-  "Leona" : 6,
-  "Lillia" : 4,
-  "Lissandra" : 5,
-  "Lucian" : 6,
-  "Lulu" : 8,
-  "Lux" : 5,
-  "Malphite" : 9,
-  "Malzahar" : 5,
-  "Maokai" : 4,
-  "Master Yi" : 5,
-  "Miss Fortune" : 6,
-  "Mordekaiser" : 5,
-  "Morgana" : 5,
-  "Nami" : 5,
-  "Nasus" : 7,
-  "Nautilus" : 5,
-  "Neeko" : 5,
-  "Nidalee" : 5,
-  "Nocturne" : 7,
-  "Nunu & Willump" : 5,
-  "Olaf" : 2,
-  "Orianna" : 6,
-  "Ornn" : 5,
-  "Pantheon" : 6,
-  "Poppy" : 6,
-  "Pyke" : 5,
-  "Qiyana" : 7,
-  "Quinn" : 5,
-  "Rakan" : 4,
-  "Rammus" : 5,
-  "Rek'Sai" : 5,
-  "Rell" : 4,
-  "Renata Glasc" : 5,
-  "Renekton" : 5,
-  "Rengar" : 7,
-  "Riven" : 6,
-  "Rumble" : 4,
-  "Ryze" : 4,
-  "Samira" : 6,
-  "Sejuani" : 3,
-  "Senna" : 5,
-  "Seraphine" : 6,
-  "Sett" : 5,
-  "Shaco" : 8,
-  "Shen" : 7,
-  "Shyvana" : 3,
-  "Singed" : 3,
-  "Sion" : 7,
-  "Sivir" : 4,
-  "Skarner" : 4,
-  "Sona" : 5,
-  "Soraka" : 7,
-  "Swain" : 7,
-  "Sylas" : 5,
-  "Syndra" : 5,
-  "Tahm Kench" : 5,
-  "Taliyah" : 4,
-  "Talon" : 6,
-  "Taric" : 2,
-  "Teemo" : 5,
-  "Thresh" : 6,
-  "Tristana" : 5,
-  "Trundle" : 5,
-  "Tryndamere" : 6,
-  "Twisted Fate" : 6,
-  "Twitch" : 6,
-  "Udyr" : 3,
-  "Urgot" : 5,
-  "Varus" : 3,
-  "Vayne" : 5,
-  "Veigar" : 7,
-  "Vel'Koz" : 8,
-  "Vex" : 5,
-  "Vi" : 5,
-  "Viego" : 5,
-  "Viktor" : 5,
-  "Vladimir" : 6,
-  "Volibear" : 5,
-  "Warwick" : 4,
-  "Wukong" : 5,
-  "Xayah" : 4,
-  "Xerath" : 8,
-  "Xin Zhao" : 5,
-  "Yasuo" : 6,
-  "Yone" : 7,
-  "Yorick" : 7,
-  "Yuumi" : 7,
-  "Zac" : 6,
-  "Zed" : 6,
-  "Zeri" : 5,
-  "Ziggs" : 4,
-  "Zilean" : 7,
-  "Zoe" : 5,
-  "Zyra" : 4,"""
 
 # Fetches suggested bans for a particular team
 # Params:
@@ -936,24 +705,35 @@ globalChampionDict = {"Ahri": 3,
 # Outputs:
 #   none (programmatic)
 #   a formatted message to #pregame-draft channel
-async def getBans(sumIdList, ctx=713356398490288158):
-    global globalChampionDict
+async def getBans(sumIdList, ctx=""):
+    if ctx=="":
+        ctx = bot.get_channel(784087009974681650) #ddos_domain #713356398490288158) #pregame-draft
+    with open("champion_preferences.json", "r", newline="") as file:
+        globalChampionDict = json.load(file)
     banWeights = {}
     for sumId in sumIdList:
-        champDict = await getPlayerChampList(ctx, sumId, 50)
-        for championName, championGamesPlayedValue in champDict:
-            if globalChampionDict[championName]:
-                if banWeights[championName]:
+        logger.info(f"Attempting to get bans for summoner {sumId}")
+        champDict = await getPlayerChampList(sumId, 50)
+        if type(champDict) != type({"dict":True}):
+            return await ctx.send(str(champDict))
+        logger.info(f"Champion history in hand")
+        for championName, championGamesPlayedValue in champDict.items():
+            if championName in globalChampionDict:
+                if championName in banWeights:
                     banWeights[championName] += globalChampionDict[championName] * championGamesPlayedValue
                 else:
                     banWeights[championName] = globalChampionDict[championName] * championGamesPlayedValue
             else:
-                if banWeights[championName]:
+                if championName in banWeights:
                     banWeights[championName] += globalChampionDict[championName]
                 else:
-                    banWeights[championName] = globalChampionDict[championName]
-    channel = bot.get_channel(ctx)
-    await channel.send(str(banWeights)) #Needs formatting -A
+                    banWeights[championName] = 5 #default
+    logger.info(f"Ban fetch complete")
+    await ctx.send(str(dict(sorted(banWeights.items(), key = lambda item: -item[1])))) #Needs formatting -A
+
+@bot.command()
+async def clashTest(ctx):
+    return await getBans(["ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx"])
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
