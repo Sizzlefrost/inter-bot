@@ -733,7 +733,9 @@ async def getBans(sumIdList, ctx=""):
 
 @bot.command()
 async def clashTest(ctx):
-    return await getBans(["ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx"])
+    #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
+    #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
+    return await getBans(["_Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu"])
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
