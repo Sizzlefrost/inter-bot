@@ -48,6 +48,8 @@ SIZZLEMAC = "2c:f0:5d:24:ac:02"
 BOTHANDLER = 777947935698583562
 BOTUSER = 789912991159418937
 
+LOL_champion_translation_dict = False
+
 intents = discord.Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix='.', intents=intents)
@@ -509,9 +511,6 @@ async def kill(ctx):
 
 # -- CLASH block -- #
 
-# anti rate limiting: current second and number of requests since last second
-antiRL = [dt.datetime.now().second, 1]
-
 # Send a request to Riot API, signed with the Dev API Key
 # Params:
 #   endpt (str) - part of the URL to access, example "lol/summoner/v4/summoners/by-name/Sand%20Baggins"
@@ -520,30 +519,19 @@ antiRL = [dt.datetime.now().second, 1]
 #   res (json) or False - body of the response on success, False on error
 #   status_code (numeric) - 1xx INFO, 2xx OK, 3xx REDIRECT, 4xx INPUT ERROR, 5xx SERVER ERROR
 async def requestRiot(endpt, routing="euw1"):
-    RATE_LIMIT = 20
-    global antiRL
-    API_key = "RGAPI-832d4de6-906c-4566-8f6a-744ed1f6c87c"
-
-    # before request, ensure we're not about to be rate limited
-    current = dt.datetime.now().second
-    if antiRL[0] != current: # every second, reset request counter
-        antiRL[1] = 1
-        antiRL[0] = current
-    if antiRL[1] >= RATE_LIMIT - 1: #if about to break rate limit, wait
-        logger.warning("About to exceed rate limits. Idling.")
-        while dt.datetime.now().second == antiRL[0]:
-            await asyncio.sleep(0.05)
-        logger.warning("Done idling.")
-
+    API_key = "RGAPI-e9649bf0-fe3f-46f1-8784-1c321414e39a"
+    
     res = requests.get(f"https://{routing}.api.riotgames.com/{endpt}", headers={"X-Riot-Token": API_key})
-    antiRL[1] += 1
 
     if res.ok:
         return res.json(), res.status_code
     else:
         if res.status_code == 429: # rate limiting protection
-            logger.error("Received a 429 RATE_LIMIT despite precautions. Terminating command.")
-            raise RuntimeError("Command terminated due to a rate limiting breach.")
+            # experimental: non-terminal rate limiter handling
+            seconds = res.headers["Retry-After"]
+            logger.info(f"Triggered experimental rate limiter handling. Blocking for {seconds} seconds.")
+            await asyncio.sleep(int(seconds))
+            return await requestRiot(endpt, routing) # retry
         else:
             logger.warning(f"Recorded an HTTP error: {res.status_code} - { res.json()['status']['message'] }")
         return False, res.status_code
@@ -654,13 +642,15 @@ async def getClashTeam():
 # Gets the list of champions a player played recently
 # MISLEADING NAME: technically, returns a *dictionary*
 # Params:
-#   sumid (str) - Summoner ID to check
+#   sumId (str) - Summoner ID to check
 #   matchCount (numeric) - number of matches (depth of lookup)
 # Outputs:
 #   champDict (dict)
-#       championName (str) - name of champion (as displayed, in client language)
+#       championName (str) - KEY of champion (close to display name, but not quite)
 #       gamesPlayed (num) - number of games target summoner played on the champion
-async def getPlayerChampList(sumId, matchCount):
+async def getPlayerChampList(sumId):
+    champTranslation = await fetchChampData()
+
     champDict = {}
     reqn = 1
     response, errorcode = await requestRiot(f"lol/summoner/v4/summoners/{sumId}")
@@ -670,11 +660,14 @@ async def getPlayerChampList(sumId, matchCount):
         puuid = response["puuid"]
         reqn += 1
 
-    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?start=0&count={matchCount}", "europe")
+    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?type=ranked&start=0&count=40", "europe")
+    response2, errorcode2 = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?queue=400&start=0&count=20", "europe")
     if not response:
         pass
     else:
         matchList = response
+        for match in response2:
+            matchList.append(match)
         reqn += 1
         for match in matchList:
             response, errorcode = await requestRiot(f"lol/match/v5/matches/{match}", "europe")
@@ -688,7 +681,8 @@ async def getPlayerChampList(sumId, matchCount):
                         break
                     else:
                         i += 1
-                champion = matchData["info"]["participants"][i]["championName"]
+                championId = matchData["info"]["participants"][i]["championId"]
+                champion = champTranslation[str(championId)][1] # translate key to display name
                 # possibly collect other data here - gold, xp, kda, etc
                 if champion in champDict:
                     champDict[champion] += 1
@@ -697,6 +691,17 @@ async def getPlayerChampList(sumId, matchCount):
     if errorcode >= 400:
         return f"HTTP error encountered during request #{reqn}: {errorcode}"
     return champDict
+
+# Gets a dict of champion masteries for a particular summoner ID
+# Params:
+#   sumId (str) - Summoner ID to check
+# Outputs:
+#   masteryDict (dict)
+#       championName (str) - name of champion (as displayed, in client language)
+#       masteryPoints (str) - amount of mastery points target summoner has on the champion
+async def getMastery(sumId):
+    response, errorcode = await requestRiot(f"lol/champion-mastery/v4/champion-masteries/by-summoner/{sumId}")
+
 
 # Fetches suggested bans for a particular team
 # Params:
@@ -709,27 +714,68 @@ async def getBans(sumIdList, ctx=""):
     if ctx=="":
         ctx = bot.get_channel(784087009974681650) #ddos_domain #713356398490288158) #pregame-draft
     with open("champion_preferences.json", "r", newline="") as file:
-        globalChampionDict = json.load(file)
+        preferences = json.load(file)
     banWeights = {}
     for sumId in sumIdList:
         logger.info(f"Attempting to get bans for summoner {sumId}")
-        champDict = await getPlayerChampList(sumId, 50)
+        champDict = await getPlayerChampList(sumId)
         if type(champDict) != type({"dict":True}):
             return await ctx.send(str(champDict))
         logger.info(f"Champion history in hand")
         for championName, championGamesPlayedValue in champDict.items():
-            if championName in globalChampionDict:
+            if championName in preferences:
                 if championName in banWeights:
-                    banWeights[championName] += globalChampionDict[championName] * championGamesPlayedValue
+                    banWeights[championName] += preferences[championName] * championGamesPlayedValue
                 else:
-                    banWeights[championName] = globalChampionDict[championName] * championGamesPlayedValue
+                    banWeights[championName] = preferences[championName] * championGamesPlayedValue
             else:
                 if championName in banWeights:
-                    banWeights[championName] += globalChampionDict[championName]
+                    banWeights[championName] += preferences[championName]
                 else:
                     banWeights[championName] = 5 #default
     logger.info(f"Ban fetch complete")
-    await ctx.send(str(dict(sorted(banWeights.items(), key = lambda item: -item[1])))) #Needs formatting -A
+
+    global LOL_champion_translation_dict
+    version = LOL_champion_translation_dict["version"]
+
+    # bad code, will fix later -S.
+    for champ, value in dict(sorted(banWeights.items(), key = lambda item: -item[1])).items():
+        display = discord.Embed(title="Clash ban report", description=champ+": "+str(value), colour=COLOUR_DEFAULT)
+        for ID, data in LOL_champion_translation_dict.items():
+            if data[1] == champ:
+                key = data[0]
+        display.set_image(url=f"http://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{key}.png")
+
+    await ctx.send(embed=display) #Needs formatting -A
+
+# Returns a conversion dict for champion keys, IDs and display names
+# Params:
+#   none
+# Outputs:
+#   champs (dict)
+#       ID (numeric) - champion ID, e.g. 161
+#       data (list)
+#           key (str) - champion key, e.g. "Velkoz"
+#           name (str) - champion display name, e.g. "Vel'Koz"
+async def fetchChampData():
+    global LOL_champion_translation_dict
+
+    if LOL_champion_translation_dict == False:
+        logger.info("Generating a new champion translation dict")
+        # I have a very rudimentary system in place to avoid errors
+        version = requests.get("https://ddragon.leagueoflegends.com/api/versions.json").json()[0]
+        champs = requests.get(f"http://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json").json()
+        champData = champs["data"]
+        champs = {}
+        for champion, data in champData.items():
+            champs[str(data["key"])] = [data["id"], data["name"]]
+        champs["version"] = version
+        #logger.info("FOLLOWING CHAMPION DATA RECOVERED: \n"+str(champs.items()))
+        LOL_champion_translation_dict = champs
+    else:
+        logger.info("Champion translation dict found")
+
+    return LOL_champion_translation_dict 
 
 @bot.command()
 async def clashTest(ctx):
@@ -744,6 +790,8 @@ async def clashTest(ctx):
 # Outputs:
 #   none
 async def clashCheckLoop():
+    global LOL_champion_translation_dict # very cringe error protection system
+    LOL_champion_translation_dict = False # at launch, clear previous champion definitions
     previousStatus = ""
     bracketId = ""
     while True:
