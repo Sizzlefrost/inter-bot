@@ -1,4 +1,5 @@
 *.json
+!champion_preferences.json
 !backups/*
 *.txt
 token.csv
