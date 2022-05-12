@@ -15,6 +15,8 @@ import win32api #windows-specific way of detecting exit events, because apparent
 import requests #HTTP requests to interact with Riot API
 import subprocess #for interactions with command line
 import base64 #encoding of password to communicate with league client
+from PIL import Image
+import math
 
 from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
@@ -103,12 +105,13 @@ async def on_ready():
     if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
+    botStatus = discord.Game("League of Legends")
     if self_mac == ALEXMAC: #alex
-        botstatus = discord.Activity(type=discord.ActivityType.listening, name="enoyreve")
+        botStatus = discord.Activity(type=discord.ActivityType.listening, name="everyone")
     elif self_mac == SIZZLEMAC: #sizzle
-        botstatus = discord.Game("with souls")
-    if bot.activity != botstatus:
-        await bot.change_presence(status=discord.Status.online, activity=botstatus)
+        botStatus = discord.Game("with souls")
+    if bot.activity != botStatus:
+        await bot.change_presence(status=discord.Status.online, activity=botStatus)
     logger.info('Thresh is ready to lantern')
 
 
@@ -336,7 +339,7 @@ async def raman(ctx):
 
 
 @bot.command()
-async def list(ctx):
+async def gimmeList(ctx):
     file = await download("media.csv")
     with open("media.csv", "wb") as f:
         f.write(file.read())
@@ -735,18 +738,35 @@ async def getBans(sumIdList, ctx=""):
                     banWeights[championName] = 5 #default
     logger.info(f"Ban fetch complete")
 
-    global LOL_champion_translation_dict
-    version = LOL_champion_translation_dict["version"]
+    champTranslation = await fetchChampData()
+    version = champTranslation["version"]
 
-    # bad code, will fix later -S.
-    for champ, value in dict(sorted(banWeights.items(), key = lambda item: -item[1])).items():
-        display = discord.Embed(title="Clash ban report", description=champ+": "+str(value), colour=COLOUR_DEFAULT)
-        for ID, data in LOL_champion_translation_dict.items():
+    message = ""
+    image = Image.new(mode="RGBA", size=(0,0))
+    banWeights = dict(sorted(banWeights.items(), key=lambda item: -item[1]))
+    keys = list(banWeights.keys())
+    values = list(banWeights.values())
+    for i in range(15):
+        champ, value = keys[i], values[i]
+        for ID, data in champTranslation.items():
             if data[1] == champ:
                 key = data[0]
-        display.set_image(url=f"http://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{key}.png")
-
-    await ctx.send(embed=display) #Needs formatting -A
+        URL = requests.get(f"http://ddragon.leagueoflegends.com/cdn/{version}/img/champion/{key}.png")
+        img = Image.open(io.BytesIO(URL.content))
+        if i < 5:
+            w = image.width + img.width
+        else:
+            w = 120 * 5
+        h = 120 * (i // 5 + 1)
+        newImage = Image.new("RGBA", (w, h))
+        newImage.paste(image)
+        newImage.paste(img, (120 * (i % 5), 120 * (i // 5)))
+        image = newImage
+        message += champ+": "+str(value)+"\n"
+    image.save("BanList.png")
+    await ctx.send(file=discord.File("BanList.png"))
+    os.remove("BanList.png")
+    await replywithembed(message, ctx)
 
 # Returns a conversion dict for champion keys, IDs and display names
 # Params:
@@ -757,6 +777,7 @@ async def getBans(sumIdList, ctx=""):
 #       data (list)
 #           key (str) - champion key, e.g. "Velkoz"
 #           name (str) - champion display name, e.g. "Vel'Koz"
+
 async def fetchChampData():
     global LOL_champion_translation_dict
 
@@ -781,7 +802,8 @@ async def fetchChampData():
 async def clashTest(ctx):
     #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
     #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
-    return await getBans(["_Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu"])
+    #All of us = ["TZ5IUmbfiY8bMv-gpLoquV2jqfLXTdJYgxy5JjwMzxacWBo", "INal6ml1WDwCpPvFMVPJv5eyNd79nbaFBPPKKfPuFMh3azgs", "YZSmOwIrbbCIz2kuymDvl4hd_8vUG97qBiRkY6EUog2G5kF-", "ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx", "_Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu"]
+    return await getBans(["ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx"])
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
