@@ -45,6 +45,7 @@ COLOUR_DEFAULT = 0x7289da
 
 ALEX = 225678449790943242
 ALEXMAC = "00:d8:61:14:48:d3"
+ALEXMAC2 = "2c:fd:a1:61:63:c2"
 SIZZLE = 140129710268088330
 SIZZLEMAC = "2c:f0:5d:24:ac:02"
 BOTHANDLER = 777947935698583562
@@ -105,8 +106,9 @@ async def on_ready():
     if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
-    if self_mac == ALEXMAC: #alex
-        botstatus = discord.Activity(type=discord.ActivityType.listening, name="enoyreve")
+    botstatus = discord.Game("League of Legends")
+    if self_mac == ALEXMAC or self_mac == ALEXMAC2: #alex
+        botstatus = discord.Activity(type=discord.ActivityType.listening, name="everyone")
     elif self_mac == SIZZLEMAC: #sizzle
         botstatus = discord.Game("with souls")
     if bot.activity != botstatus:
@@ -627,10 +629,15 @@ async def getClashTeamByPlayer(playername=""):
         players = []
         for player in team["players"]:
             players.append([player["summonerId"], player["position"]])
-        return players, team["abbreviation"] + " | " + team["name"]
 
-# MISLEADING NAME!
-# ADD ERROR HANDLING!
+    for player in players:
+        sumId = player[0]
+        response, errorcode = await requestRiot("lol/summoner/v4/summoners/"+sumId)
+        if response:
+            player.append(response["summonerLevel"])
+
+    return players, team["abbreviation"] + " | " + team["name"]
+
 # Intermediate function: gets a player from each team in the bracket in order to procure bans for these teams
 # Params:
 #   none
@@ -671,8 +678,10 @@ async def getPlayerChampList(sumId):
         puuid = response["puuid"]
         reqn += 1
 
-    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?type=ranked&start=0&count=40", "europe")
-    response2, errorcode2 = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?queue=400&start=0&count=20", "europe")
+    t = round(time.time()) - 9000000
+
+    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?type=ranked&startTime={t}&count=30", "europe")
+    response2, errorcode2 = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?queue=400&startTime={t}&count=15", "europe")
     if not response:
         pass
     else:
@@ -742,9 +751,13 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         preferences = json.load(file)
     banWeights = {}
     masteryRecommendations = {}
+    totalLevel = 0
+    for player in playerList:
+        totalLevel += player[2]
     for player in playerList:
         sumId = player[0]
         role = player[1]
+        level = player[2]
         logger.info(f"Attempting to get bans for summoner {sumId}")
         champDict = await getPlayerChampList(sumId)
         if type(champDict) != type({"dict":True}):
@@ -752,16 +765,18 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         logger.info(f"Champion history in hand")
         masteryDict = await getMastery(sumId)
 
+        levelMult = player[2] / totalLevel + 0.8 # % of total level - 20%, plus 1 (base multiplier)
+
         unitedDict = {}
         for lane, champData in preferences.items():
-            if role != lane:
+            if role != "UNSELECTED" and role != "FILL" and role != lane:
                 continue
             for champName, preference in champData.items():
                 unitedDict[champName] = {"preference": preference}
         for champName, gamesPlayed in champDict.items():
             if champName not in unitedDict:
                 unitedDict[champName] = {}
-            unitedDict[champName]["gamesPlayed"] = gamesPlayed * 0.7
+            unitedDict[champName]["gamesPlayed"] = 6*math.log(gamesPlayed + 1)
         for champName, mastery in masteryDict.items():
             if champName not in unitedDict:
                 unitedDict[champName] = {}
@@ -771,13 +786,13 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
             elif mastery >= 300000:
                 #logger.info(champName + ": " + str(mastery))
                 unitedDict[champName]["highMastery"] = mastery
-            unitedDict[champName]["masteryMult"] = math.log(mastery / 5000)
+            unitedDict[champName]["masteryMult"] = math.log(mastery / 5000) # 50k -> x1
 
         for champName, data in unitedDict.items():
             #logger.info(champName + ": " + str(data))
             if "gamesPlayed" in data:
                 if "preference" in data: #if not, then it's the wrong role
-                    banWeights[champName] = round(data["gamesPlayed"] * data["preference"] * data["masteryMult"],2)
+                    banWeights[champName] = round(data["gamesPlayed"] * data["preference"] * data["masteryMult"] * levelMult,2)
             if "highMastery" in data:
                 masteryRecommendations[champName] = data["highMastery"]
     logger.info(f"Ban fetch complete")
@@ -788,6 +803,7 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     message = ""
     image = Image.new(mode="RGBA", size=(0,0))
     banWeights = dict(sorted(banWeights.items(), key=lambda item: -item[1]))
+    #logger.info(str(banWeights))
     keys = list(banWeights.keys())
     values = list(banWeights.values())
     for i in range(15):
@@ -811,10 +827,6 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     await channel.send(file=discord.File("BanList.png"))
     os.remove("BanList.png")
 
-    msg = await channel.fetch_message(channel.last_message_id)
-    url = msg.attachments[0].url
-    await msg.delete()
-
     if masteryRecommendations:
         message += "\n\nMastery highlights:"
 
@@ -822,8 +834,6 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         title=f"Clash report for team {team}", 
         description=message, 
         colour=COLOUR_DEFAULT)
-
-    e.set_image(url=url)
 
     for champ, pts in masteryRecommendations.items():
         e.add_field(name=champ, value=pts)
