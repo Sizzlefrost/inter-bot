@@ -1,8 +1,10 @@
 {
+    "MIDDLE": {    
         "Ahri": 3,
         "Akali": 7,
         "Akshan": 6,
         "Anivia": 5,
+        "Annie": 5,
         "Aurelion Sol": 1,
         "Azir": 3,
         "Cassiopeia": 5,
@@ -28,7 +30,9 @@
         "Yasuo": 7,
         "Yone": 7,
         "Zed": 8,
-        "Zoe": 4,
+        "Zoe": 4
+    },
+    "BOTTOM": {
         "Aphelios": 6,
         "Ashe": 2,
         "Caitlyn": 3,
@@ -49,7 +53,9 @@
         "Varus": 2,
         "Vayne": 7,
         "Xayah": 5,
-        "Zeri": 7,
+        "Zeri": 7
+    },
+    "JUNGLE": {
         "Amumu": 3,
         "Diana": 4,
         "Ekko": 5,
@@ -89,7 +95,9 @@
         "Warwick": 4,
         "Wukong": 6,
         "Xin Zhao": 6,
-        "Zac": 4,
+        "Zac": 4
+    },
+    "UTILITY": {
         "Alistar": 3,
         "Bard": 4,
         "Blitzcrank": 7,
@@ -119,7 +127,9 @@
         "Xerath": 8,
         "Yuumi": 8,
         "Zilean": 7,
-        "Zyra": 4,
+        "Zyra": 4
+    },
+    "TOP": {
         "Aatrox": 5,
         "Camille": 3,
         "Cho'Gath": 6,
@@ -128,10 +138,12 @@
         "Fiora": 7,
         "Gangplank": 8,
         "Gnar": 5,
+        "Gragas": 5,
         "Gwen": 10,
         "Illaoi": 8,
         "Irelia": 7,
         "Jax": 8,
+        "Jayce": 5,
         "Garen": 9,
         "Kayle": 2,
         "Kennen": 4,
@@ -151,4 +163,5 @@
         "Tryndamere": 5,
         "Urgot": 6,
         "Yorick": 5
+    }
 }

@@ -15,8 +15,8 @@ import win32api #windows-specific way of detecting exit events, because apparent
 import requests #HTTP requests to interact with Riot API
 import subprocess #for interactions with command line
 import base64 #encoding of password to communicate with league client
-from PIL import Image
-import math
+from PIL import Image #neat image processing lib, to concat champ icons for clash ban preview
+import math #duh. math.
 
 from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
@@ -27,11 +27,11 @@ import os #duh. Operating System operations (deleting files, joining paths)
 import shutil #advanced operating system operations (copying files)
 from tempfile import NamedTemporaryFile
 
-"""gauth = GoogleAuth()
+gauth = GoogleAuth()
 gauth.LoadClientConfigSettings()
 gauth.LocalWebserverAuth()
 drive = GoogleDrive(gauth)
-service = build('drive', 'v3', credentials=gauth.credentials)"""
+service = build('drive', 'v3', credentials=gauth.credentials)
 
 logging.config.fileConfig('logging.conf')
 sizzler = logging.getLogger("intbot.bot.sizzle")
@@ -105,13 +105,12 @@ async def on_ready():
     if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
-    botStatus = discord.Game("League of Legends")
     if self_mac == ALEXMAC: #alex
-        botStatus = discord.Activity(type=discord.ActivityType.listening, name="everyone")
+        botstatus = discord.Activity(type=discord.ActivityType.listening, name="enoyreve")
     elif self_mac == SIZZLEMAC: #sizzle
-        botStatus = discord.Game("with souls")
-    if bot.activity != botStatus:
-        await bot.change_presence(status=discord.Status.online, activity=botStatus)
+        botstatus = discord.Game("with souls")
+    if bot.activity != botstatus:
+        await bot.change_presence(status=discord.Status.online, activity=botstatus)
     logger.info('Thresh is ready to lantern')
 
 
@@ -521,8 +520,8 @@ async def kill(ctx):
 # Outputs:
 #   res (json) or False - body of the response on success, False on error
 #   status_code (numeric) - 1xx INFO, 2xx OK, 3xx REDIRECT, 4xx INPUT ERROR, 5xx SERVER ERROR
-async def requestRiot(endpt, routing="euw1"):
-    API_key = "RGAPI-e9649bf0-fe3f-46f1-8784-1c321414e39a"
+async def requestRiot(endpt, routing="euw1", retry = -1):
+    API_key = "RGAPI-7f8d3ebb-0c61-480e-ad74-7ecf58f96d88"
     
     res = requests.get(f"https://{routing}.api.riotgames.com/{endpt}", headers={"X-Riot-Token": API_key})
 
@@ -532,9 +531,18 @@ async def requestRiot(endpt, routing="euw1"):
         if res.status_code == 429: # rate limiting protection
             # experimental: non-terminal rate limiter handling
             seconds = res.headers["Retry-After"]
-            logger.info(f"Triggered experimental rate limiter handling. Blocking for {seconds} seconds.")
+            logger.info(f"429 - triggered rate limiter. Blocking for {seconds} seconds.")
             await asyncio.sleep(int(seconds))
             return await requestRiot(endpt, routing) # retry
+        elif res.status_code == 503: # service unavailable
+            if retry == 0:
+                logger.info(f"503 - service unavailable at endpoint {endpt}. Max retries reached, proceeding.")
+                return False, res.status_code
+            elif retry == -1:
+                retry = 3
+            logger.info(f"503 - service unavailable at endpoint {endpt}. Attempting a retry.")
+            retry -= 1
+            return await requestRiot(endpt, routing, retry)
         else:
             logger.warning(f"Recorded an HTTP error: {res.status_code} - { res.json()['status']['message'] }")
         return False, res.status_code
@@ -602,24 +610,24 @@ async def getClashTeamByPlayer(playername=""):
 
     # if there is no team ID, then there is no team I guess lol
     if playername != "" and team_id == "":
-        return []
+        return [], ""
     elif team_id == "":
-        return []
+        return [], ""
 
     # step 2 - fetch the team
     response, errorcode = await requestRiot("lol/clash/v1/teams/"+team_id)
     if response == False:
         # ... handle these somehow again
-        pass
+        return [], ""
     else:
         # OK -- team found
         team = response
         # team.name, team.abbreviation, team.tier available here
         # team.players - list of [summonerId, position (role/lane), role (captain/member)]
-        summonerIds = []
+        players = []
         for player in team["players"]:
-            summonerIds.append(player["summonerId"])
-        return summonerIds
+            players.append([player["summonerId"], player["position"]])
+        return players, team["abbreviation"] + " | " + team["name"]
 
 # MISLEADING NAME!
 # ADD ERROR HANDLING!
@@ -640,13 +648,13 @@ async def getClashTeam():
         summonerId = roster["captainSummonerId"]
         player, error = await requestClient(f"lol-hovercard/v1/friend-info-by-summoner/{summonerId}")
         name = player["name"]
-        await getBans(await getClashTeamByPlayer(name))
+        players, team = await getClashTeamByPlayer(name)
+        await getBans(players, team)
 
 # Gets the list of champions a player played recently
 # MISLEADING NAME: technically, returns a *dictionary*
 # Params:
 #   sumId (str) - Summoner ID to check
-#   matchCount (numeric) - number of matches (depth of lookup)
 # Outputs:
 #   champDict (dict)
 #       championName (str) - KEY of champion (close to display name, but not quite)
@@ -704,38 +712,74 @@ async def getPlayerChampList(sumId):
 #       masteryPoints (str) - amount of mastery points target summoner has on the champion
 async def getMastery(sumId):
     response, errorcode = await requestRiot(f"lol/champion-mastery/v4/champion-masteries/by-summoner/{sumId}")
+    if not response:
+        pass
+    else:
+        champTranslation = await fetchChampData()
+        masteryDict = {}
+        for champion in response:
+            champName = champTranslation[str(champion["championId"])][1]
+            masteryDict[champName] = champion["championPoints"]
+        return masteryDict
 
 
 # Fetches suggested bans for a particular team
 # Params:
-#   sumIdList (list of str) - list of summoner IDs to check
+#   playerList (list of list)
+#       sumId (str) - summoner ID to check
+#       position (str) - role; may be FILL or UNSELECTED
+#   team (str, optional) - team name, e.g. "INT | Divern"
 #   ctx (numeric, optional) - context to send resulting message into. Defaults to #pregame-draft
 # Outputs:
 #   none (programmatic)
 #   a formatted message to #pregame-draft channel
-async def getBans(sumIdList, ctx=""):
+async def getBans(playerList, team="??? | Unknown", ctx=""):
     if ctx=="":
-        ctx = bot.get_channel(784087009974681650) #ddos_domain #713356398490288158) #pregame-draft
+        channel = bot.get_channel(784087009974681650) #ddos_domain #713356398490288158) #pregame-draft
+    else:
+        channel = ctx.channel
     with open("champion_preferences.json", "r", newline="") as file:
         preferences = json.load(file)
     banWeights = {}
-    for sumId in sumIdList:
+    masteryRecommendations = {}
+    for player in playerList:
+        sumId = player[0]
+        role = player[1]
         logger.info(f"Attempting to get bans for summoner {sumId}")
         champDict = await getPlayerChampList(sumId)
         if type(champDict) != type({"dict":True}):
             return await ctx.send(str(champDict))
         logger.info(f"Champion history in hand")
-        for championName, championGamesPlayedValue in champDict.items():
-            if championName in preferences:
-                if championName in banWeights:
-                    banWeights[championName] += preferences[championName] * championGamesPlayedValue
-                else:
-                    banWeights[championName] = preferences[championName] * championGamesPlayedValue
-            else:
-                if championName in banWeights:
-                    banWeights[championName] += preferences[championName]
-                else:
-                    banWeights[championName] = 5 #default
+        masteryDict = await getMastery(sumId)
+
+        unitedDict = {}
+        for lane, champData in preferences.items():
+            if role != lane:
+                continue
+            for champName, preference in champData.items():
+                unitedDict[champName] = {"preference": preference}
+        for champName, gamesPlayed in champDict.items():
+            if champName not in unitedDict:
+                unitedDict[champName] = {}
+            unitedDict[champName]["gamesPlayed"] = gamesPlayed * 0.7
+        for champName, mastery in masteryDict.items():
+            if champName not in unitedDict:
+                unitedDict[champName] = {}
+            # mastery multiplier
+            if mastery <= 10000:
+                mastery = 10000
+            elif mastery >= 300000:
+                #logger.info(champName + ": " + str(mastery))
+                unitedDict[champName]["highMastery"] = mastery
+            unitedDict[champName]["masteryMult"] = math.log(mastery / 5000)
+
+        for champName, data in unitedDict.items():
+            #logger.info(champName + ": " + str(data))
+            if "gamesPlayed" in data:
+                if "preference" in data: #if not, then it's the wrong role
+                    banWeights[champName] = round(data["gamesPlayed"] * data["preference"] * data["masteryMult"],2)
+            if "highMastery" in data:
+                masteryRecommendations[champName] = data["highMastery"]
     logger.info(f"Ban fetch complete")
 
     champTranslation = await fetchChampData()
@@ -764,9 +808,27 @@ async def getBans(sumIdList, ctx=""):
         image = newImage
         message += champ+": "+str(value)+"\n"
     image.save("BanList.png")
-    await ctx.send(file=discord.File("BanList.png"))
+    await channel.send(file=discord.File("BanList.png"))
     os.remove("BanList.png")
-    await replywithembed(message, ctx)
+
+    msg = await channel.fetch_message(channel.last_message_id)
+    url = msg.attachments[0].url
+    await msg.delete()
+
+    if masteryRecommendations:
+        message += "\n\nMastery highlights:"
+
+    e = discord.Embed(
+        title=f"Clash report for team {team}", 
+        description=message, 
+        colour=COLOUR_DEFAULT)
+
+    e.set_image(url=url)
+
+    for champ, pts in masteryRecommendations.items():
+        e.add_field(name=champ, value=pts)
+
+    await channel.send(embed=e)
 
 # Returns a conversion dict for champion keys, IDs and display names
 # Params:
@@ -777,7 +839,6 @@ async def getBans(sumIdList, ctx=""):
 #       data (list)
 #           key (str) - champion key, e.g. "Velkoz"
 #           name (str) - champion display name, e.g. "Vel'Koz"
-
 async def fetchChampData():
     global LOL_champion_translation_dict
 
@@ -802,8 +863,8 @@ async def fetchChampData():
 async def clashTest(ctx):
     #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
     #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
-    #All of us = ["TZ5IUmbfiY8bMv-gpLoquV2jqfLXTdJYgxy5JjwMzxacWBo", "INal6ml1WDwCpPvFMVPJv5eyNd79nbaFBPPKKfPuFMh3azgs", "YZSmOwIrbbCIz2kuymDvl4hd_8vUG97qBiRkY6EUog2G5kF-", "ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx", "_Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu"]
-    return await getBans(["ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx"])
+    players, team = await getClashTeamByPlayer("Sand Baggins")
+    return await getBans(players, team)
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
@@ -831,7 +892,8 @@ async def clashCheckLoop():
             summonerId = roster["captainSummonerId"]
             player, error = await requestClient(f"lol-hovercard/v1/friend-info-by-summoner/{summonerId}")
             name = player["name"]
-            await getBans(await getClashTeamByPlayer(name))
+            players, team = await getClashTeamByPlayer(name)
+            await getBans(players, team)
         previousStatus = summary[0]["state"]
         await asyncio.sleep(30)
 
