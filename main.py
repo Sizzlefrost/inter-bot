@@ -114,6 +114,8 @@ async def on_ready():
     if bot.activity != botstatus:
         await bot.change_presence(status=discord.Status.online, activity=botstatus)
     logger.info('Thresh is ready to lantern')
+    bot.loop.create_task(clashCheckLoop())
+    bot.loop.create_task(timer())
 
 
 async def timer():
@@ -523,7 +525,7 @@ async def kill(ctx):
 #   res (json) or False - body of the response on success, False on error
 #   status_code (numeric) - 1xx INFO, 2xx OK, 3xx REDIRECT, 4xx INPUT ERROR, 5xx SERVER ERROR
 async def requestRiot(endpt, routing="euw1", retry = -1):
-    API_key = "RGAPI-7f8d3ebb-0c61-480e-ad74-7ecf58f96d88"
+    API_key = "RGAPI-137b8ffc-ce57-4e21-ab59-fcaa355050a9"
     
     res = requests.get(f"https://{routing}.api.riotgames.com/{endpt}", headers={"X-Riot-Token": API_key})
 
@@ -564,7 +566,7 @@ async def requestClient(endpt):
         stderr=subprocess.PIPE).communicate()[0])
     # amidst the shell output, we have to regex-filter out the useful stuff
     port = re.search("(?<=--app-port\=)[0-9]{1,5}", shell).group()
-    password = re.search("(?<=--remoting-auth-token\=)\w*", shell).group() #K2K27vvHVodOUEvW8J8Ohw
+    password = re.search("(?<=--remoting-auth-token\=)[a-zA-Z0-9_\-]*", shell).group() #K2K27vvHVodOUEvW8J8Ohw#
     url = f"https://127.0.0.1:{port}/{endpt}"
     res = requests.get(url, auth=requests.auth.HTTPBasicAuth("riot", password), verify=False)
     if res.ok:
@@ -591,7 +593,7 @@ async def getClashTeamByPlayer(playername=""):
         response, errorcode = await requestRiot("lol/summoner/v4/summoners/by-name/"+handle)
         if not response:
             if errorcode == 403:
-                replywithembed("Invalid API key! Use .updateAPIKey to provide a valid one.", ctx)
+                logger.error("Invalid API key! Use .updateAPIKey to provide a valid one.")
                 return
             # ... perhaps other errors can be treated here as well
         else:
@@ -638,26 +640,6 @@ async def getClashTeamByPlayer(playername=""):
 
     return players, team["abbreviation"] + " | " + team["name"]
 
-# Intermediate function: gets a player from each team in the bracket in order to procure bans for these teams
-# Params:
-#   none
-# Outputs:
-#   none
-async def getClashTeam():
-    summary, error = await requestClient("lol-clash/v1/tournament-summary")
-    bracketId = summary[0]["bracketId"]
-    bracket, error = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
-    # await ctx.send(str(bracket)) #debug, doesn't work without a CTX
-    rosters = bracket["rosters"]
-    for rosterId in rosters:
-        #rosterId = "130b4a9a-e2e4-4aa4-9cbb-454601d66b55"
-        roster, error = await requestClient(f"lol-clash/v1/roster/{rosterId}")
-        summonerId = roster["captainSummonerId"]
-        player, error = await requestClient(f"lol-hovercard/v1/friend-info-by-summoner/{summonerId}")
-        name = player["name"]
-        players, team = await getClashTeamByPlayer(name)
-        await getBans(players, team)
-
 # Gets the list of champions a player played recently
 # MISLEADING NAME: technically, returns a *dictionary*
 # Params:
@@ -680,7 +662,7 @@ async def getPlayerChampList(sumId):
 
     t = round(time.time()) - 9000000
 
-    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?type=ranked&startTime={t}&count=30", "europe")
+    response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?type=ranked&startTime={t}&count=35", "europe")
     response2, errorcode2 = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?queue=400&startTime={t}&count=15", "europe")
     if not response:
         pass
@@ -744,7 +726,7 @@ async def getMastery(sumId):
 #   a formatted message to #pregame-draft channel
 async def getBans(playerList, team="??? | Unknown", ctx=""):
     if ctx=="":
-        channel = bot.get_channel(784087009974681650) #ddos_domain #713356398490288158) #pregame-draft
+        channel = bot.get_channel(713356398490288158) #pregame-draft 784087009974681650) #ddos_domain
     else:
         channel = ctx.channel
     with open("champion_preferences.json", "r", newline="") as file:
@@ -806,7 +788,12 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     #logger.info(str(banWeights))
     keys = list(banWeights.keys())
     values = list(banWeights.values())
-    for i in range(15):
+    logger.info(str(banWeights))
+    if len(banWeights) < 15:
+        champs = len(banWeights)
+    else:
+        champs = 15
+    for i in range(champs):
         champ, value = keys[i], values[i]
         for ID, data in champTranslation.items():
             if data[1] == champ:
@@ -873,8 +860,8 @@ async def fetchChampData():
 async def clashTest(ctx):
     #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
     #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
-    players, team = await getClashTeamByPlayer("Sand Baggins")
-    return await getBans(players, team)
+    #players, team = await getClashTeamByPlayer("Sand Baggins")
+    return await getBans([["_Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu", "JUNGLE", 100]])
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
@@ -885,26 +872,35 @@ async def clashTest(ctx):
 async def clashCheckLoop():
     global LOL_champion_translation_dict # very cringe error protection system
     LOL_champion_translation_dict = False # at launch, clear previous champion definitions
-    previousStatus = ""
+    previousId = 0
     bracketId = ""
     while True:
         summary, error = await requestClient("lol-clash/v1/tournament-summary")
+        if summary == False:
+            logger.info("Not in Clash")
+            await asyncio.sleep(30)
+            logger.info("Finished")
+            continue
         if bracketId == "":
             bracketId = summary[0]["bracketId"]
-        if summary[0]["state"] == "SCOUTING" and previousStatus != "SCOUTING":
-            bracket, error = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
-            for game in bracket["matches"]:
-                if game["rosterId1"] == summary[0]["rosterId"] and game["status"] == "UPCOMING":
+        bracket, error = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
+        ownRosterId = summary[0]["rosterId"]
+        rosterId = 0
+        for game in bracket["matches"]:
+            if game["status"] == "UPCOMING":
+                if game["rosterId1"] == ownRosterId:
                     rosterId = game["rosterId2"]
-                elif game["rosterId2"] == summary[0]["rosterId"] and game["status"] == "UPCOMING":
+                elif game["rosterId2"] == ownRosterId:
                     rosterId = game["rosterId1"]
+        if rosterId != 0 and previousId != rosterId:
+            #rosterId = 5254350 #5351069
             roster, error = await requestClient(f"lol-clash/v1/roster/{rosterId}")
-            summonerId = roster["captainSummonerId"]
+            summonerId = roster["members"][0]["summonerId"]
             player, error = await requestClient(f"lol-hovercard/v1/friend-info-by-summoner/{summonerId}")
             name = player["name"]
             players, team = await getClashTeamByPlayer(name)
             await getBans(players, team)
-        previousStatus = summary[0]["state"]
+            previousId = rosterId
         await asyncio.sleep(30)
 
 @bot.command()
@@ -1449,5 +1445,4 @@ def getBotToken():
 # --------------------------------------------------#
 # --------------------------------------------------#
 
-bot.loop.create_task(timer()) 
 bot.run(getBotToken())
