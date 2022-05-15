@@ -18,6 +18,9 @@ import base64 #encoding of password to communicate with league client
 from PIL import Image #neat image processing lib, to concat champ icons for clash ban preview
 import math #duh. math.
 
+from requests.packages.urllib3.exceptions import InsecureRequestWarning #suppress warning about uncertified requests
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
 from pydrive.auth import GoogleAuth #these all are required for GDrive integration
 from pydrive.drive import GoogleDrive
 from googleapiclient.discovery import build
@@ -36,6 +39,26 @@ service = build('drive', 'v3', credentials=gauth.credentials)
 logging.config.fileConfig('logging.conf')
 sizzler = logging.getLogger("intbot.bot.sizzle")
 logger = logging.getLogger("intbot.bot")
+clash_loop = logging.getLogger("intbot.bot.clashloop")
+clash_search = logging.getLogger("intbot.bot.clashsearch")
+CLASH_SEARCHING = False
+
+def clog(content, *args, level="info", **kwargs): #clash log, hehe
+    if level == "info":
+        level = 20
+    elif level == "debug":
+        level = 10
+    elif level == "warning":
+        level = 30
+    elif level == "error":
+        level = 40
+    elif level == "critical":
+        level = 50
+
+    if CLASH_SEARCHING:
+        clash_search.log(level, content, *args, **kwargs)
+    else:
+        clash_loop.log(level, content, *args, **kwargs)
 
 ROLEFILTER = "^(top|jgl|mid|bot|sup|jungle|middle|bottom|support|toplane|midlane|botlane|jg|jung|adc|adcarry|supp)"
 COMMANDS = [ "hello", "help", "assertchamp", "imain", "iplay", "mypool", "confidence", "terminate" ]
@@ -525,7 +548,7 @@ async def kill(ctx):
 #   res (json) or False - body of the response on success, False on error
 #   status_code (numeric) - 1xx INFO, 2xx OK, 3xx REDIRECT, 4xx INPUT ERROR, 5xx SERVER ERROR
 async def requestRiot(endpt, routing="euw1", retry = -1):
-    API_key = "RGAPI-137b8ffc-ce57-4e21-ab59-fcaa355050a9"
+    API_key = "RGAPI-87063d5f-e152-48a9-8426-a1bec23545dc"
     
     res = requests.get(f"https://{routing}.api.riotgames.com/{endpt}", headers={"X-Riot-Token": API_key})
 
@@ -535,20 +558,27 @@ async def requestRiot(endpt, routing="euw1", retry = -1):
         if res.status_code == 429: # rate limiting protection
             # experimental: non-terminal rate limiter handling
             seconds = res.headers["Retry-After"]
-            logger.info(f"429 - triggered rate limiter. Blocking for {seconds} seconds.")
-            await asyncio.sleep(int(seconds))
+            clog(f"429 - triggered rate limiter. Blocking for {seconds} seconds.")
+            seconds = int(seconds)
+            for percDone in range(10,101,10):
+                #10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+                await asyncio.sleep(seconds/10)
+                if percDone != 100:
+                    clog(f"Still blocking, {percDone}% done")
+            clog(f"Done blocking, retrying request")
+            #await asyncio.sleep(int(seconds))
             return await requestRiot(endpt, routing) # retry
         elif res.status_code == 503: # service unavailable
             if retry == 0:
-                logger.info(f"503 - service unavailable at endpoint {endpt}. Max retries reached, proceeding.")
+                clog(f"503 - service unavailable at endpoint {endpt}. Max retries reached, proceeding.")
                 return False, res.status_code
             elif retry == -1:
                 retry = 3
-            logger.info(f"503 - service unavailable at endpoint {endpt}. Attempting a retry.")
+            clog(f"503 - service unavailable at endpoint {endpt}. Attempting a retry.")
             retry -= 1
             return await requestRiot(endpt, routing, retry)
         else:
-            logger.warning(f"Recorded an HTTP error: {res.status_code} - { res.json()['status']['message'] }")
+            clog(f"Recorded an HTTP error: {res.status_code} - { res.json()['status']['message'] }")
         return False, res.status_code
 
 # Send a request to LCU API (local instance of League Client)
@@ -608,7 +638,6 @@ async def getClashTeamByPlayer(playername=""):
                 team_id = ""
                 pass
             else:
-                # logger.info(str(response))
                 team_id = response[0]["teamId"]
                 break
 
@@ -637,6 +666,7 @@ async def getClashTeamByPlayer(playername=""):
         response, errorcode = await requestRiot("lol/summoner/v4/summoners/"+sumId)
         if response:
             player.append(response["summonerLevel"])
+            player.append(response["name"])
 
     return players, team["abbreviation"] + " | " + team["name"]
 
@@ -726,13 +756,16 @@ async def getMastery(sumId):
 #   a formatted message to #pregame-draft channel
 async def getBans(playerList, team="??? | Unknown", ctx=""):
     if ctx=="":
-        channel = bot.get_channel(713356398490288158) #pregame-draft 784087009974681650) #ddos_domain
+        channel = bot.get_channel(713356398490288158) #pregame-draft #784087009974681650) #ddos_domain 
     else:
         channel = ctx.channel
     with open("champion_preferences.json", "r", newline="") as file:
         preferences = json.load(file)
+    clog(f"Opponent found, preferences loaded")
+    roleSummary = {}
     banWeights = {}
     masteryRecommendations = {}
+    offroleWarning = {}
     totalLevel = 0
     for player in playerList:
         totalLevel += player[2]
@@ -740,11 +773,13 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         sumId = player[0]
         role = player[1]
         level = player[2]
-        logger.info(f"Attempting to get bans for summoner {sumId}")
+        name = player[3]
+        roleSummary[role.lower()] = name
+        clog(f"Attempting to get bans for {name} ({role})")
         champDict = await getPlayerChampList(sumId)
         if type(champDict) != type({"dict":True}):
             return await ctx.send(str(champDict))
-        logger.info(f"Champion history in hand")
+        clog(f"Champion history in hand")
         masteryDict = await getMastery(sumId)
 
         levelMult = player[2] / totalLevel + 0.8 # % of total level - 20%, plus 1 (base multiplier)
@@ -758,7 +793,8 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         for champName, gamesPlayed in champDict.items():
             if champName not in unitedDict:
                 unitedDict[champName] = {}
-            unitedDict[champName]["gamesPlayed"] = 6*math.log(gamesPlayed + 1)
+            unitedDict[champName]["gamesMult"] = 6*math.log(gamesPlayed + 1)
+            unitedDict[champName]["gamesPlayed"] = gamesPlayed
         for champName, mastery in masteryDict.items():
             if champName not in unitedDict:
                 unitedDict[champName] = {}
@@ -766,18 +802,22 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
             if mastery <= 10000:
                 mastery = 10000
             elif mastery >= 300000:
-                #logger.info(champName + ": " + str(mastery))
+                #clog(champName + ": " + str(mastery))
                 unitedDict[champName]["highMastery"] = mastery
             unitedDict[champName]["masteryMult"] = math.log(mastery / 5000) # 50k -> x1
 
         for champName, data in unitedDict.items():
             #logger.info(champName + ": " + str(data))
-            if "gamesPlayed" in data:
+            if "gamesMult" in data:
                 if "preference" in data: #if not, then it's the wrong role
-                    banWeights[champName] = round(data["gamesPlayed"] * data["preference"] * data["masteryMult"] * levelMult,2)
+                    banWeights[champName] = round(data["gamesMult"] * data["preference"] * data["masteryMult"] * levelMult,2)
+                elif data["gamesPlayed"] >= 12: #significant offrole presence
+                    if role == "UTILITY":
+                        role = "SUPPORT"
+                    offroleWarning[champName] = [data["gamesPlayed"], role]
             if "highMastery" in data:
                 masteryRecommendations[champName] = data["highMastery"]
-    logger.info(f"Ban fetch complete")
+    clog(f"Ban fetch complete. Good luck!")
 
     champTranslation = await fetchChampData()
     version = champTranslation["version"]
@@ -785,10 +825,9 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     message = ""
     image = Image.new(mode="RGBA", size=(0,0))
     banWeights = dict(sorted(banWeights.items(), key=lambda item: -item[1]))
-    #logger.info(str(banWeights))
     keys = list(banWeights.keys())
     values = list(banWeights.values())
-    logger.info(str(banWeights))
+    clog(str(banWeights))
     if len(banWeights) < 15:
         champs = len(banWeights)
     else:
@@ -814,16 +853,75 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     await channel.send(file=discord.File("BanList.png"))
     os.remove("BanList.png")
 
-    if masteryRecommendations:
-        message += "\n\nMastery highlights:"
+    emojis = {e.name:str(e) for e in bot.emojis}
 
     e = discord.Embed(
-        title=f"Clash report for team {team}", 
-        description=message, 
+        title=f"{emojis['feelsIvernMan']} __Clash report for team {team}__",
+        #description="",
+        description="A happy birthday to @alex6644#3995!", 
         colour=COLOUR_DEFAULT)
+    
+    # SECTION 1 - CHAMPION THREAT EVALUATIONS
 
-    for champ, pts in masteryRecommendations.items():
-        e.add_field(name=champ, value=pts)
+    e.add_field(
+        name = f"📈 __Champion Threat Evaluations__",
+        value = message,
+        inline = True)
+
+    # SECTION 2 - ROLE SUMMARY
+
+    roles = ""
+    desiredOrderList = ["top","jungle","middle","bottom","utility","fill","unselected"]
+    newRoleSummary = {}
+    for k in desiredOrderList:
+        if k in roleSummary:
+            newRoleSummary[k] = roleSummary[k]
+    roleSummary = newRoleSummary
+
+    for role, player in roleSummary.items():
+        if role == "top":
+            role = f"{emojis['toplane']}"
+        elif role == "jungle":
+            role = f"{emojis['jungle']}"
+        elif role == "middle":
+            role = f"{emojis['midlane']}"
+        elif role == "bottom":
+            role = f"{emojis['botlane']}"
+        elif role == "utility":
+            role = f"{emojis['support']}"
+        elif role == "unselected" or role == "fill":
+            role = f"{emojis['question']}"
+        roles += f"{role} {player}\n"
+
+    e.add_field(
+        name = f"📜 __Role Summary__",
+        value = roles,
+        inline = True)
+
+    e.add_field(name='\u200B', value='\u200B', inline=False) #empty separator field
+
+    # SECTION 3 - OFFROLE WARNINGS
+    if offroleWarning:
+
+        roleswaps = ""
+        for champ, data in offroleWarning.items():
+            roleswaps += f"**{champ}** - {data[1].lower()} has {data[0]} games\n"
+
+        e.add_field(
+            name = f"🔁 __Potential Role Swaps__",
+            value = roleswaps,
+            inline = True)
+
+    #SECTION 4 - MASTERY WARNINGS
+    if masteryRecommendations:
+        masteries = ""
+        for champ, pts in masteryRecommendations.items():
+            masteries += f"**{champ}** - {pts}\n"
+
+        e.add_field(
+            name = f"{emojis['LETSGO']} __Comfort Picks (>300k mastery)__",
+            value = masteries,
+            inline = True)
 
     await channel.send(embed=e)
 
@@ -840,7 +938,7 @@ async def fetchChampData():
     global LOL_champion_translation_dict
 
     if LOL_champion_translation_dict == False:
-        logger.info("Generating a new champion translation dict")
+        clog(f"Generating a new champion translation dict")
         # I have a very rudimentary system in place to avoid errors
         version = requests.get("https://ddragon.leagueoflegends.com/api/versions.json").json()[0]
         champs = requests.get(f"http://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json").json()
@@ -849,10 +947,10 @@ async def fetchChampData():
         for champion, data in champData.items():
             champs[str(data["key"])] = [data["id"], data["name"]]
         champs["version"] = version
-        #logger.info("FOLLOWING CHAMPION DATA RECOVERED: \n"+str(champs.items()))
+        #clog(f"FOLLOWING CHAMPION DATA RECOVERED: \n"+str(champs.items()))
         LOL_champion_translation_dict = champs
     else:
-        logger.info("Champion translation dict found")
+        clog(f"Champion translation dict found")
 
     return LOL_champion_translation_dict 
 
@@ -860,8 +958,8 @@ async def fetchChampData():
 async def clashTest(ctx):
     #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
     #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
-    #players, team = await getClashTeamByPlayer("Sand Baggins")
-    return await getBans([["_Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu", "JUNGLE", 100]])
+    players, team = await getClashTeamByPlayer("Colloay")
+    return await getBans(players, team)
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
@@ -871,20 +969,23 @@ async def clashTest(ctx):
 #   none
 async def clashCheckLoop():
     global LOL_champion_translation_dict # very cringe error protection system
+    global CLASH_SEARCHING # flag for logging
     LOL_champion_translation_dict = False # at launch, clear previous champion definitions
     previousId = 0
     bracketId = ""
     while True:
+        clog("Beginning a new cycle")
         summary, error = await requestClient("lol-clash/v1/tournament-summary")
-        if summary == False:
-            logger.info("Not in Clash")
+        if summary == False or summary[0]["bracketId"] == -1:
+            clog("Presently not in clash. Awaiting next cycle")
             await asyncio.sleep(30)
-            logger.info("Finished")
-            continue
+            continue #this was insufficient. Summary can return a valid output including "bracketId: -1"
         if bracketId == "":
             bracketId = summary[0]["bracketId"]
+        clog(f"Detected bracket {bracketId}")        
         bracket, error = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
         ownRosterId = summary[0]["rosterId"]
+        clog(f"Now searching for matches. Our roster ID: {ownRosterId}")
         rosterId = 0
         for game in bracket["matches"]:
             if game["status"] == "UPCOMING":
@@ -892,14 +993,19 @@ async def clashCheckLoop():
                     rosterId = game["rosterId2"]
                 elif game["rosterId2"] == ownRosterId:
                     rosterId = game["rosterId1"]
-        if rosterId != 0 and previousId != rosterId:
+        if rosterId == 0 or rosterId == previousId:
+            clog("No upcoming opponents were found. Awaiting next cycle")
+        else:
             #rosterId = 5254350 #5351069
             roster, error = await requestClient(f"lol-clash/v1/roster/{rosterId}")
             summonerId = roster["members"][0]["summonerId"]
             player, error = await requestClient(f"lol-hovercard/v1/friend-info-by-summoner/{summonerId}")
             name = player["name"]
             players, team = await getClashTeamByPlayer(name)
+            clog(f"Detected upcoming game against {team} (ID {rosterId})")
+            CLASH_SEARCHING = True
             await getBans(players, team)
+            CLASH_SEARCHING = False
             previousId = rosterId
         await asyncio.sleep(30)
 
