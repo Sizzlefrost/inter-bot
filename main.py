@@ -41,7 +41,7 @@ sizzler = logging.getLogger("intbot.bot.sizzle")
 logger = logging.getLogger("intbot.bot")
 clash_loop = logging.getLogger("intbot.bot.clashloop")
 clash_search = logging.getLogger("intbot.bot.clashsearch")
-CLASH_SEARCHING = False
+CLASH_STATE = "not signed up for clash"
 
 def clog(content, *args, level="info", **kwargs): #clash log, hehe
     if level == "info":
@@ -55,7 +55,7 @@ def clog(content, *args, level="info", **kwargs): #clash log, hehe
     elif level == "critical":
         level = 50
 
-    if CLASH_SEARCHING:
+    if CLASH_STATE == "searching bans":
         clash_search.log(level, content, *args, **kwargs)
     else:
         clash_loop.log(level, content, *args, **kwargs)
@@ -973,7 +973,11 @@ async def clashTest(ctx):
     #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
     #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
     players, team = await getClashTeamByPlayer("FilthyF")
-    return await getBans(players, team)
+    return await getBans(players, team)\
+
+@bot.command()
+async def clashstatus(ctx):
+    await replywithembed(f"Currently {CLASH_STATE}.")
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
@@ -983,22 +987,27 @@ async def clashTest(ctx):
 #   none
 async def clashCheckLoop():
     global LOL_champion_translation_dict # very cringe error protection system
-    global CLASH_SEARCHING # flag for logging
+    global CLASH_STATE
     LOL_champion_translation_dict = False # at launch, clear previous champion definitions
     previousId = 0
     bracketId = ""
     while True:
-        clog("Beginning a new cycle")
+        #clog("Beginning a new cycle") #commented to avoid *clogging* the log
         summary, error = await requestClient("lol-clash/v1/tournament-summary")
-        if summary == False or summary[0]["bracketId"] == -1:
-            clog("Presently not in clash. Awaiting next cycle")
-            await asyncio.sleep(30)
-            continue #this was insufficient. Summary can return a valid output including "bracketId: -1"
+        if summary == False or summary[0]["rosterId"] == "":
+            CLASH_STATE = "not signed up for clash"
+            await asyncio.sleep(30) # if not in clash at all
+            continue
+        elif summary[0]["bracketId"] == -1:
+            CLASH_STATE = "signed up, not in a bracket"
+            await asyncio.sleep(30) # if in clash, but not in a bracket
+            continue
         if bracketId == "":
             bracketId = summary[0]["bracketId"]
         clog(f"Detected bracket {bracketId}")        
         bracket, error = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
         ownRosterId = int(summary[0]["rosterId"])
+        CLASH_STATE = "awaiting game"
         clog(f"Now searching for matches. Our roster ID: {ownRosterId}")
         rosterId = 0
         for game in bracket["matches"]:
@@ -1019,9 +1028,9 @@ async def clashCheckLoop():
             name = player["name"]
             players, team = await getClashTeamByPlayer(name)
             clog(f"Detected upcoming game against {team} (ID {rosterId})")
-            CLASH_SEARCHING = True
+            CLASH_STATE = "searching bans"
             await getBans(players, team)
-            CLASH_SEARCHING = False
+            CLASH_STATE = "awaiting game"
             previousId = rosterId
         await asyncio.sleep(30)
 
