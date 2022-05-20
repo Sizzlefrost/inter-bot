@@ -977,7 +977,7 @@ async def clashTest(ctx):
 
 @bot.command()
 async def clashstatus(ctx):
-    await replywithembed(f"Currently {CLASH_STATE}.")
+    await replywithembed(f"Currently {CLASH_STATE}.", ctx)
 
 # Main loop. Every 30s, checks tournament summary for status.
 # If SCOUTING detected, trigger ban-fetching logic.
