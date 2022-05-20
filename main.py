@@ -66,13 +66,24 @@ COLOUR_SUCCESS = 0x00FF00
 COLOUR_FAILURE = 0xFF0000
 COLOUR_DEFAULT = 0x7289da
 
-ALEX = 225678449790943242
-ALEXMAC = "00:d8:61:14:48:d3"
-ALEXMAC2 = "2c:fd:a1:61:63:c2"
-SIZZLE = 140129710268088330
-SIZZLEMAC = "2c:f0:5d:24:ac:02"
-BOTHANDLER = 777947935698583562
-BOTUSER = 789912991159418937
+from dotenv import dotenv_values
+
+secureDict = dotenv_values(".env")  # take environment variables from .env.
+
+def secure(varname): #shorthand to procure a secured variable
+    if not "STR" in varname:
+        try:
+            retval = int(secureDict[varname])
+        except ValueError:
+            retval = secureDict[varname]
+    else:
+        retval = secureDict[varname]
+    return retval
+
+ALEX = secure("ALEX_ID")
+SIZZLE = secure("SIZZLE_ID")
+BOTHANDLER = secure("BOTHANDLER_ID")
+BOTUSER = secure("BOTUSER_ID")
 
 LOL_champion_translation_dict = False
 
@@ -94,9 +105,13 @@ killBool = False
 @bot.event
 async def on_message(message):
     role = discord.utils.find(lambda r: r.name == 'Nice People', message.guild.roles)
-    if message.author.id == 225678449790943242 and role in bot.get_guild(713343823962701897).get_member(message.author.id).roles:
+    ALEX = secure("ALEX_ID")
+    GUILD = secure("GUILD_SID")
+    MIRROR = secure("MIRROR_CHID")
+    SELF = secure("THRESH_ID")
+    if message.author.id == ALEX and role in bot.get_guild(GUILD).get_member(message.author.id).roles:
         await message.channel.send("Nice try annoying the Boss")
-    elif (role in bot.get_guild(713343823962701897).get_member(message.author.id).roles or (message.channel.id == 827166243035021362 and message.author.id != 785566806509223939)) and len(message.attachments) == 0:
+    elif (role in bot.get_guild(GUILD).get_member(message.author.id).roles or (message.channel.id == MIRROR and message.author.id != SELF)) and len(message.attachments) == 0:
         if "@" in message.content:
             newMsg = message.content
         else:
@@ -111,7 +126,7 @@ async def on_message(message):
         global currentChannel
         if message.author != currentAuthor or message.channel.id != currentChannel:
             id = message.author.id
-            name = bot.get_guild(713343823962701897).get_member(id)
+            name = bot.get_guild(GUILD).get_member(id)
             #if type(name.nick) is str:
                 #await channel.send("__**"+name.nick+"**__")
             #else:
@@ -126,6 +141,9 @@ async def on_message(message):
 
 @bot.event
 async def on_ready():
+    ALEXMAC = secure("ALEX_MAC")
+    ALEXMAC2 = secure("ALEX_MAC_2")
+    SIZZLEMAC = secure("SIZZLE_MAC")
     if bot.user.avatar != "3359691b5526f7a02f330d9b69d0c8dc":
         await bot.user.edit(avatar=pfp)
     logger.info(f'Self mac address {self_mac}')
@@ -143,7 +161,8 @@ async def on_ready():
 
 async def timer():
     await bot.wait_until_ready()
-    channel = bot.get_channel(713343824641916971)
+    GENERAL = secure("GENERAL_CHID")
+    channel = bot.get_channel(GENERAL)
     msg_sent = False
     refresh = False
     while True:
@@ -296,7 +315,7 @@ async def remind(ctx, user=None):
     # user accepts nickname, username or UID
     # by default it's me, so normal .remind's work as usual - S.
     if user == None: #assignment has to be done manually to avoid a TypeError
-        user = SIZZLE
+        user = secure["SIZZLE_ID"]
     user = interpretUser(ctx, user)
     logger.info("Reminding %s", user.name)
     await ctx.send("https://cdn.discordapp.com/attachments/713343824641916971/777559744273317888/Morg_Q.gif")
@@ -417,7 +436,7 @@ async def disco(ctx):
             count += 1
             currentTime = time.perf_counter()
             newColour = discord.Colour.from_rgb(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-            guild = bot.get_guild(713343823962701897)
+            guild = bot.get_guild(secure("GUILD_SID"))
             role = discord.utils.get(guild.roles, name="Colours")
             await role.edit(colour=newColour)
     newColour = discord.Colour.from_rgb(242, 117, 55)
@@ -428,7 +447,6 @@ async def disco(ctx):
 @commands.has_role(BOTUSER)
 async def spam(ctx, tag, *args):
     if not killBool:
-        print("Tag")
         found = ""
         for i in args:
             if str(ALEX) in i:
@@ -453,7 +471,6 @@ async def spam(ctx, tag, *args):
             for i in range(10):
                 await globals()[tag[1:]](ctx, *args)
         else:
-            print("String")
             for i in range(10):
                 await ctx.send(tag + " " + " ".join(args))
 
@@ -505,12 +522,10 @@ async def ssgo(ctx):
     with open("secretsanta.csv", "r", newline="") as file:
         reader = csv.reader(file, delimiter=",", quotechar="|")
         for row in reader:
-            print("here")
             id = ids[pos]
             pos += 1
             for member in bot.get_all_members():
                 if member.id == int(id):
-                    print(id)
                     await member.send(f"Secret Santa: {bot.get_user(int(row[0])).name}")
                     if len(row) > 1:
                         await member.send(f"Their wishlist: {row[1]}")
@@ -548,7 +563,7 @@ async def kill(ctx):
 #   res (json) or False - body of the response on success, False on error
 #   status_code (numeric) - 1xx INFO, 2xx OK, 3xx REDIRECT, 4xx INPUT ERROR, 5xx SERVER ERROR
 async def requestRiot(endpt, routing="euw1", retry = -1):
-    API_key = "RGAPI-87063d5f-e152-48a9-8426-a1bec23545dc"
+    API_key = secure("STR_RIOT")
     
     res = requests.get(f"https://{routing}.api.riotgames.com/{endpt}", headers={"X-Riot-Token": API_key})
 
@@ -756,7 +771,7 @@ async def getMastery(sumId):
 #   a formatted message to #pregame-draft channel
 async def getBans(playerList, team="??? | Unknown", ctx=""):
     if ctx=="":
-        channel = bot.get_channel(713356398490288158) #pregame-draft #784087009974681650) #ddos_domain 
+        channel = bot.get_channel(secure("DRAFT_CHID")) #pregame-draft #secure("DDOS_CHID")) #ddos_domain 
     else:
         channel = ctx.channel
     with open("champion_preferences.json", "r", newline="") as file:
@@ -857,8 +872,8 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
 
     e = discord.Embed(
         title=f"{emojis['feelsIvernMan']} __Clash report for team {team}__",
-        #description="",
-        description="A happy birthday to @alex6644#3995!", 
+        description="",
+        #description="A happy birthday to @alex6644#3995!", 
         colour=COLOUR_DEFAULT)
     
     # SECTION 1 - CHAMPION THREAT EVALUATIONS
@@ -890,9 +905,8 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         elif role == "utility":
             role = f"{emojis['support']}"
         elif role == "unselected" or role == "fill":
-            role = f"{emojis['question']}"
+            role = f"❓"
         roles += f"{role} {player}\n"
-
     e.add_field(
         name = f"📜 __Role Summary__",
         value = roles,
@@ -958,7 +972,7 @@ async def fetchChampData():
 async def clashTest(ctx):
     #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
     #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
-    players, team = await getClashTeamByPlayer("Colloay")
+    players, team = await getClashTeamByPlayer("FilthyF")
     return await getBans(players, team)
 
 # Main loop. Every 30s, checks tournament summary for status.
@@ -984,15 +998,17 @@ async def clashCheckLoop():
             bracketId = summary[0]["bracketId"]
         clog(f"Detected bracket {bracketId}")        
         bracket, error = await requestClient(f"lol-clash/v1/bracket/{bracketId}")
-        ownRosterId = summary[0]["rosterId"]
+        ownRosterId = int(summary[0]["rosterId"])
         clog(f"Now searching for matches. Our roster ID: {ownRosterId}")
         rosterId = 0
         for game in bracket["matches"]:
             if game["status"] == "UPCOMING":
                 if game["rosterId1"] == ownRosterId:
-                    rosterId = game["rosterId2"]
+                    if game["rosterId2"] > 0:
+                        rosterId = game["rosterId2"]
                 elif game["rosterId2"] == ownRosterId:
-                    rosterId = game["rosterId1"]
+                    if game["rosterId1"] > 0:
+                        rosterId = game["rosterId1"]
         if rosterId == 0 or rosterId == previousId:
             clog("No upcoming opponents were found. Awaiting next cycle")
         else:
@@ -1434,9 +1450,9 @@ async def terminate(ctx):
 @bot.command()
 @commands.has_role(BOTHANDLER)
 async def restart(ctx):
+    os.system("start /min startup.py")
     await replywithembed("Bot Restarting", ctx)
     await bot.close()
-    os.startfile("startup.py") #launch statusbot before closing
 
 # --------------------------------------------------#
 # --------------------------------------------------#
@@ -1541,14 +1557,4 @@ def interpretUser(ctx, value=None):
 # --------------------------------------------------#
 # --------------------------------------------------#
 
-def getBotToken():
-    with open("token.csv", "r") as f:
-        token = f.read()
-        logger.info("Token verified: " + str(token))
-        f.close()
-        return str(token)
-
-# --------------------------------------------------#
-# --------------------------------------------------#
-
-bot.run(getBotToken())
+bot.run(secure("STR_THRESH"))
