@@ -542,6 +542,15 @@ async def kill(ctx):
     killBool = False
 
 
+@bot.command()
+async def getTime(ctx):
+    await ctx.send(f"<t:{int(time.time())}:T>")
+
+
+@bot.command()
+async def getDate(ctx):
+    await ctx.send(f"<t:{int(time.time())}:d>")
+
 
 # --------------------------------------------------#
 # --------------------------------------------------#
