@@ -42,6 +42,7 @@ logger = logging.getLogger("intbot.bot")
 clash_loop = logging.getLogger("intbot.bot.clashloop")
 clash_search = logging.getLogger("intbot.bot.clashsearch")
 CLASH_STATE = "not signed up for clash"
+CLASH_MSG_HANDLE = ""
 
 def clog(content, *args, level="info", **kwargs): #clash log, hehe
     if level == "info":
@@ -564,6 +565,55 @@ async def getDate(ctx):
 
 # -- CLASH block -- #
 
+# Update the progress bar message (initially, that's created in getBans)
+# Params:
+#   progress (numeric or str, optional) - new value for estimated overall ban-fetch progress
+#       str - OVERRIDE progress estimate
+#       int - INCREMENT progress estimate
+#   description (str, optional) - description of current sub-task
+#   ratelimit (str, optional) - rate limiting status
+async def makeProgress(progress="", description="missing", ratelimit=""):
+    global CLASH_MSG_HANDLE
+    
+    embed = CLASH_MSG_HANDLE.embeds[0]
+
+    olddesc = embed.description
+
+    if type(progress) == type(0): # increment old progress value
+        progress = int(re.search("- [0123456789.]*%",olddesc)[0][2:-1]) + progress
+    elif progress == "": # keep old progress value
+        progress = re.search("- [0123456789.]*%",olddesc)[0][2:-1]
+
+    # assemble actual progress bar
+
+    bar = ""
+    i = 0
+    while i <= 100: #p = 10
+        i += 5
+        # if i is now within 5 of progress, draw a ▓
+        if int(progress) >= i and int(progress) - i < 5:
+            bar += "▓▓"
+            continue
+        i += 5
+        # if i is less than progress, draw a █; else, ▒
+        if int(progress) >= i:
+            bar += "██"
+        else:
+            bar += "▒▒"
+
+    embed.description = "˼"+bar+"˻\n˺"+bar+"˹"
+    embed.description += f"\nData assembly in progress - {progress}%"
+    if description != "missing" and description != "":
+        embed.description += f"\nCurrently {description}"
+    elif description == "missing": # default behaviour is to keep old description if there was one
+        preserved_description = re.search("(?<=\nCurrently ).+(?=\n|$)", olddesc)
+        if preserved_description:
+            embed.description += f"\nCurrently {preserved_description[0]}"
+    if ratelimit != "":
+        embed.description += f"\nAwaiting Riot availability - in {ratelimit}s"
+
+    await CLASH_MSG_HANDLE.edit(embed=embed)
+
 # Send a request to Riot API, signed with the Dev API Key
 # Params:
 #   endpt (str) - part of the URL to access, example "lol/summoner/v4/summoners/by-name/Sand%20Baggins"
@@ -584,8 +634,11 @@ async def requestRiot(endpt, routing="euw1", retry = -1):
             seconds = res.headers["Retry-After"]
             clog(f"429 - triggered rate limiter. Blocking for {seconds} seconds.")
             seconds = int(seconds)
+            sec_rem = seconds
             for percDone in range(10,101,10):
                 #10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+                await makeProgress(description="missing", ratelimit=sec_rem)
+                sec_rem = int(sec_rem - seconds/10)
                 await asyncio.sleep(seconds/10)
                 if percDone != 100:
                     clog(f"Still blocking, {percDone}% done")
@@ -718,6 +771,7 @@ async def getPlayerChampList(sumId):
 
     response, errorcode = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?type=ranked&startTime={t}&count=35", "europe")
     response2, errorcode2 = await requestRiot(f"lol/match/v5/matches/by-puuid/{puuid}/ids?queue=400&startTime={t}&count=15", "europe")
+    await makeProgress(1)
     if not response:
         pass
     else:
@@ -725,7 +779,12 @@ async def getPlayerChampList(sumId):
         for match in response2:
             matchList.append(match)
         reqn += 1
+        m = 0
         for match in matchList:
+            m += 1
+            if m == 3: # every 3rd match, progress bar goes up by 1%
+                await makeProgress(1)
+                m = 0
             response, errorcode = await requestRiot(f"lol/match/v5/matches/{match}", "europe")
             if not response:
                 pass
@@ -757,6 +816,7 @@ async def getPlayerChampList(sumId):
 #       masteryPoints (str) - amount of mastery points target summoner has on the champion
 async def getMastery(sumId):
     response, errorcode = await requestRiot(f"lol/champion-mastery/v4/champion-masteries/by-summoner/{sumId}")
+    await makeProgress(1)
     if not response:
         pass
     else:
@@ -783,6 +843,20 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         channel = bot.get_channel(secure("DRAFT_CHID")) #pregame-draft #secure("DDOS_CHID")) #ddos_domain 
     else:
         channel = ctx.channel
+
+    global CLASH_MSG_HANDLE
+    emojis = {e.name:str(e) for e in bot.emojis}
+    if CLASH_MSG_HANDLE == "":
+        e = discord.Embed(
+            title=f"{emojis['feelsIvernMan']} __Clash report for team {team}__",
+            description="Data assembly about to start - 0%",
+            colour=COLOUR_DEFAULT)
+
+        await channel.send(embed=e)
+
+        CLASH_MSG_HANDLE = await channel.fetch_message(channel.last_message_id)
+
+    await makeProgress("5", "setting up & loading champion preferences")
     with open("champion_preferences.json", "r", newline="") as file:
         preferences = json.load(file)
     clog(f"Opponent found, preferences loaded")
@@ -793,27 +867,36 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     totalLevel = 0
     for player in playerList:
         totalLevel += player[2]
+    i = 0
     for player in playerList:
+        i += 1
         sumId = player[0]
         role = player[1]
         level = player[2]
         name = player[3]
-        roleSummary[role.lower()] = name
-        clog(f"Attempting to get bans for {name} ({role})")
+        roleSummary[name] = role.lower()
+        await makeProgress(0,f"fetching match history for {name} ({role})")
         champDict = await getPlayerChampList(sumId)
         if type(champDict) != type({"dict":True}):
             return await ctx.send(str(champDict))
         clog(f"Champion history in hand")
+        # stringize the progress to hard-set the bar to it. In case we can't fetch all 45 matches and get fewer
+        await makeProgress(str(5+i*18),f"fetching mastery scores for {name} ({role})")
         masteryDict = await getMastery(sumId)
 
         levelMult = player[2] / totalLevel + 0.8 # % of total level - 20%, plus 1 (base multiplier)
+
+        await makeProgress(1, f"aggregating results for {name} ({role})")
 
         unitedDict = {}
         for lane, champData in preferences.items():
             if role != "UNSELECTED" and role != "FILL" and role != lane:
                 continue
             for champName, preference in champData.items():
-                unitedDict[champName] = {"preference": preference}
+                try:
+                    unitedDict[champName] = {"preference": preference}
+                except KeyError:
+                    logger.warning(f"{champName} not found in preferences")
         for champName, gamesPlayed in champDict.items():
             if champName not in unitedDict:
                 unitedDict[champName] = {}
@@ -846,12 +929,15 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     champTranslation = await fetchChampData()
     version = champTranslation["version"]
 
+    await makeProgress(0, "finalizing and beautifying output") # 95
+
     message = ""
     image = Image.new(mode="RGBA", size=(0,0))
     banWeights = dict(sorted(banWeights.items(), key=lambda item: -item[1]))
     keys = list(banWeights.keys())
     values = list(banWeights.values())
     clog(str(banWeights))
+    await makeProgress(2) # 97
     if len(banWeights) < 15:
         champs = len(banWeights)
     else:
@@ -873,16 +959,15 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
         newImage.paste(img, (120 * (i % 5), 120 * (i // 5)))
         image = newImage
         message += champ+": "+str(value)+"\n"
+    await makeProgress(2) # 99
     image.save("BanList.png")
     await channel.send(file=discord.File("BanList.png"))
     os.remove("BanList.png")
 
-    emojis = {e.name:str(e) for e in bot.emojis}
-
+    await CLASH_MSG_HANDLE.delete()
     e = discord.Embed(
         title=f"{emojis['feelsIvernMan']} __Clash report for team {team}__",
         description="",
-        #description="A happy birthday to @alex6644#3995!", 
         colour=COLOUR_DEFAULT)
     
     # SECTION 1 - CHAMPION THREAT EVALUATIONS
@@ -898,11 +983,12 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     desiredOrderList = ["top","jungle","middle","bottom","utility","fill","unselected"]
     newRoleSummary = {}
     for k in desiredOrderList:
-        if k in roleSummary:
-            newRoleSummary[k] = roleSummary[k]
+        for player, role in roleSummary.items():
+            if role == k:
+                newRoleSummary[player] = role
     roleSummary = newRoleSummary
 
-    for role, player in roleSummary.items():
+    for player, role in roleSummary.items():
         if role == "top":
             role = f"{emojis['toplane']}"
         elif role == "jungle":
@@ -981,8 +1067,8 @@ async def fetchChampData():
 async def clashTest(ctx):
     #Siz Id: ziqjWlU1QoISHplVyEQfUjB-wqeqkOXV9o3MQ2VfHCwRRHWx
     #Alex Id: _Yt4y8rx-Fwnsbm1V-p5Ay6moKYDoEJvpvq2c1CaI2-TJizu
-    players, team = await getClashTeamByPlayer("FilthyF")
-    return await getBans(players, team)\
+    players, team = await getClashTeamByPlayer("Sand Baggins")
+    return await getBans(players, team, ctx)
 
 @bot.command()
 async def clashstatus(ctx):
