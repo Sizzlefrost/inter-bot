@@ -637,8 +637,8 @@ async def requestRiot(endpt, routing="euw1", retry = -1):
             sec_rem = seconds
             for percDone in range(10,101,10):
                 #10, 20, 30, 40, 50, 60, 70, 80, 90, 100
-                await makeProgress(description="missing", ratelimit=sec_rem)
-                sec_rem = int(sec_rem - seconds/10)
+                await makeProgress(description="missing", ratelimit=int(sec_rem))
+                sec_rem = sec_rem - seconds/10
                 await asyncio.sleep(seconds/10)
                 if percDone != 100:
                     clog(f"Still blocking, {percDone}% done")
