@@ -381,7 +381,7 @@ async def gimme(ctx, id):
 
 @bot.command()
 async def raman(ctx):
-    await replywithembed("Congrats on Imperial! <@305035084468191232>", ctx)
+    await replywithembed("<@305035084468191232> Quote Board:\n\nCum in my mouth!\n\nLet's do like Russia and invade!\n\nI like incest!\n\nFascism isn't that bad!\n\nI feel like a school shooter!\n\nWho is louise and why is she jizzing?", ctx)
 
 
 @bot.command()
@@ -965,6 +965,7 @@ async def getBans(playerList, team="??? | Unknown", ctx=""):
     os.remove("BanList.png")
 
     await CLASH_MSG_HANDLE.delete()
+    CLASH_MSG_HANDLE = ""
     e = discord.Embed(
         title=f"{emojis['feelsIvernMan']} __Clash report for team {team}__",
         description="",
